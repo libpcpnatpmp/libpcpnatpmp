@@ -9,7 +9,7 @@ enables any network application to manage network edge device (e.g. to create
 NAT mapping or ask router for specific flow treatment).
 
 Supported platforms are 
-Linux, MS Windows Vista and later, OS X.
+Linux, MS Windows (Vista and later), OS X.
 
 ### Components ###
 
