@@ -251,7 +251,7 @@ typedef struct pcp_flow_info {
     uint8_t          learned_dscp; //relevant only for flow created by pcp_learn_dscp
 } pcp_flow_info_t;
 
-// Allocates info_buf by malloc, has to be freed by client when longer needed.
+// Allocates info_buf by malloc, has to be freed by client when no longer needed.
 pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count);
 
 //callback function type - called when flow state has changed
