@@ -114,6 +114,7 @@ typedef struct pcp_socket_vt_s {
  *    autodiscovery  - enable/disable auto-discovery of PCP servers
  *    socket_vt      - optional - virt. table to override default socket functions.
  *                     Pointer has to be valid until pcp_terminate is called.
+ *                     Pass NULL to use default socket functions
  *    return value   - pcp context used in other functions.
  */
 #define ENABLE_AUTODISCOVERY  1
