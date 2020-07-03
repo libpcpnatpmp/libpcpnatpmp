@@ -85,7 +85,7 @@ char *sock_ntop(const struct sockaddr *sa, socklen_t salen)
                     sizeof(str) - 1) == NULL)
                 return (NULL);
             if (ntohs(sin6->sin6_port) != 0) {
-                snprintf(portstr, sizeof(portstr) - 1, "]:%d",
+                snprintf(portstr, sizeof(portstr), "]:%d",
                         ntohs(sin6->sin6_port));
                 portstr[sizeof(portstr) - 1]='\0';
                 strcat(str, portstr);
