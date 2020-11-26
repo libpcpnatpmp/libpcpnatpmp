@@ -52,7 +52,7 @@
   #define UNUSED
  #endif
 
-#ifdef WIN32
+#ifdef _MSC_VER
 /* variable num of arguments*/
 #define DUPPRINT(fp, fmt, ...)    \
     do {                        \

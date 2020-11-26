@@ -26,10 +26,10 @@
 #ifndef PCP_MSG_STRUCTS_H_
 #define PCP_MSG_STRUCTS_H_
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #pragma warning (push)
 #pragma warning (disable:4200)
-#endif // WIN32
+#endif // _MSC_VER
 #define PCP_MAX_LEN          1100
 #define PCP_OPCODE_ANNOUNCE     0
 #define PCP_OPCODE_MAP          1
@@ -310,7 +310,7 @@ typedef struct pcp_metadata_option {
 
 #pragma pack(pop)
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #pragma warning (pop)
-#endif // WIN32
+#endif // _MSC_VER
 #endif /* PCP_MSG_STRUCTS_H_ */

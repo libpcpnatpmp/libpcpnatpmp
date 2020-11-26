@@ -1,4 +1,4 @@
-AM_CPPFLAGS = -I$(srcdir)/include -I$(srcdir)/src/net -I$(srcdir)/src
+AM_CPPFLAGS = -I$(srcdir)/include -I$(srcdir)/src/net -I$(srcdir)/src -I$(srcdir)/src/windows
 AM_CPPFLAGS += $(PCP_CPPFLAGS)
 AM_CFLAGS = $(PCP_CFLAGS)
 

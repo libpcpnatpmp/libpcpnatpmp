@@ -51,6 +51,7 @@
 #include "unp.h"
 #include "pcp_utils.h"
 
+#if 0
 // function calling WSAStartup (used in pcp-server and pcp_app)
 static int pcp_win_sock_startup() {
     int err;
@@ -88,6 +89,7 @@ static int pcp_win_sock_cleanup() {
     }
     return 0;
 }
+#endif
 
 #define PD_SOCKET_STARTUP pcp_win_sock_startup
 #define PD_SOCKET_CLEANUP pcp_win_sock_cleanup

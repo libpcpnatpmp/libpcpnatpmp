@@ -8,7 +8,7 @@ if BUILD_SERVER
 endif
 
 PCP_CPPFLAGS = -I$(top_srcdir)/libpcp/include -I$(top_srcdir)/libpcp/src/net -I$(top_srcdir)/libpcp/src
-PCP_CFLAGS = -Wall -Werror
+PCP_CFLAGS = -Wall -Werror -Wno-error=strict-aliasing
 GCOVLIB =
 
 if GCOV
