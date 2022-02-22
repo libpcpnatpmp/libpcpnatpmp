@@ -355,7 +355,7 @@ int getgateways(struct sockaddr_in6 **gws)
     }
 
     for (ret=0, i=0; i < (int)ipf_table->dwNumEntries; i++) {
-        if (ipf_table->table[i].ForwardType == MIB_IPROUTE_TYPE_INDIRECT) {
+        if (ipf_table->table[i].dwForwardType == MIB_IPROUTE_TYPE_INDIRECT) {
             (*gws)[ret].sin6_family = AF_INET6;
             S6_ADDR32(&(*gws)[ret].sin6_addr)[0]=
                 (uint32_t)ipf_table->table[i].dwForwardNextHop;

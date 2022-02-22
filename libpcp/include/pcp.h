@@ -31,16 +31,16 @@
 #include <in6addr.h>
 #include <ws2tcpip.h>
 #include <time.h>
-#include "stdint.h"
-#ifndef ssize_t
+#if !defined ssize_t && defined _MSC_VER
 typedef int ssize_t;
 #endif
 #else //WIN32
 #include <sys/time.h>
-#include <stdint.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #endif
+
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

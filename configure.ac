@@ -44,7 +44,7 @@ AC_FUNC_STRERROR_R
 AC_CHECK_FUNCS([gettimeofday memset select socket strdup strerror strndup])
 
 case "$target" in
-        *-*-mingw*|*-*-cygwin*)
+        *-*-mingw*|*-*-cygwin*|*-*-msys*)
                 AC_DEFINE(PLATFORM_WIN32, 1, [Platform is Win32])
                 PLATFORM_STRING="Win32"
                 ;;
@@ -62,6 +62,7 @@ case "$target" in
 esac
 
 AM_CONDITIONAL([PLATFORM_LINUX], [test "$PLATFORM_STRING" = "Linux"])
+AM_CONDITIONAL([PLATFORM_WINDOWS], [test "$PLATFORM_STRING" = "Win32"])
 
 AC_ARG_ENABLE(debug,
 AS_HELP_STRING([--enable-debug],

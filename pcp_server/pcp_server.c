@@ -352,7 +352,7 @@ static int print_PCP_options(void* pcp_buf, int* remainingSize,
         opt_md = (pcp_metadata_option_t*) (pcp_buf_helper
                 + processed);
 
-        DUPPRINT(log_file, "\t METADATA ID \t %d \n", htonl(opt_md->metadata_id));
+        DUPPRINT(log_file, "\t METADATA ID \t %lu \n", (unsigned long) htonl(opt_md->metadata_id));
         memcpy(metadata, opt_md->metadata, htons(opt_md->len));
         DUPPRINT(log_file, "\t METADATA \t %s \n", metadata);
 
@@ -457,7 +457,7 @@ static int printPCPreq(void * req, int req_size, options_occur_t *opt_occ,
     DUPPRINT(log_file, "PCP version:             %i\n", common_req->ver);
     DUPPRINT(log_file, "PCP opcode:              %i\n", common_req->r_opcode & 0x7F);
     DUPPRINT(log_file, "PCP R bit:               %i\n", (common_req->r_opcode & 0x80) != 0);
-    DUPPRINT(log_file, "PCP requested lifetime:  %d\n",
+    DUPPRINT(log_file, "PCP requested lifetime:  %lu\n", (unsigned long)
                                               htonl( common_req->req_lifetime));
 
     if (IN6_IS_ADDR_V4MAPPED((struct in6_addr*)common_req->ip)) {
