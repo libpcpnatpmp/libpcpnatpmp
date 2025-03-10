@@ -261,8 +261,8 @@ pcp_fstate_e pcp_wait(pcp_flow_t *flow, int timeout, int exit_on_partial_res)
         FD_SET(fd, &read_fds);
 
         PCP_LOG(PCP_LOGLVL_DEBUG,
-                "Executing select with fdmax=%d, timeout = %ld s; %ld us",
-                fdmax, tout_select.tv_sec, (long int)tout_select.tv_usec);
+                "Executing select with fdmax=%d, timeout = %lld s; %ld us",
+                fdmax, (long long) tout_select.tv_sec, (long int)tout_select.tv_usec);
 
         ret_count=select(fdmax, &read_fds, NULL, NULL, &tout_select);
 
