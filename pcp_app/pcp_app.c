@@ -167,7 +167,7 @@ typedef pcp_deviceid_option_t pcp_app_deviceid_t;
  OPTION(SHORT(s), server,     "server",               REQARG, TABS2 "Address[:port] of the PCP server.") \
  OPTION(SHORT(v), version,    "pcp-version",          REQARG, TABS1 "Maximal PCP version to be used.") \
  OPTION(SHORT(d), disdisc,    "disable-autodiscovery",NOARG,  TABS0 "Disable auto-discovery of PCP servers.") \
- OPTION(SHORT(T), timeout,    "timeout",              REQARG, TABS2 "Receive response timeout in seconds.(DEFAULT 1)") \
+ OPTION(SHORT(T), timeout,    "timeout",              REQARG, TABS2 "Receive response timeout in seconds. (default 1)") \
  OPTION(SHORT(f), fast_ret,   "fast-return",          NOARG,  TABS1 "Exit immediately after first PCP response.") \
  HELP_MSG(                                                          "") \
  HELP_MSG(                                                          "MAP/PEER operation related options:") \
@@ -179,15 +179,14 @@ typedef pcp_deviceid_option_t pcp_app_deviceid_t;
  OPTION(SHORT(t), tcp,        "tcp",                  NOARG , TABS2 "Set flow's protocol to TCP.") \
  OPTION(SHORT(u), udp,        "udp",                  NOARG , TABS2 "Set flow's protocol to UDP.") \
  OPTION(SHORT(n), prot,       "protocol",             REQARG, TABS1 "Set flow's protocol by protocol number.") \
- OPTION(SHORT(l), lifetime,   "lifetime",             REQARG, TABS1 "Set flow's lifetime(in seconds).") \
+ OPTION(SHORT(l), lifetime,   "lifetime",             REQARG, TABS1 "Set flow's lifetime (in seconds).") \
  HELP_MSG(                                                          "") \
  HELP_MSG(                                                          "PCP options for MAP/PEER operation:") \
  IFDEF(PCP_FLOW_PRIORITY, \
-   HELP_MSG(                                                          "") \
    HELP_MSG(                                                          " Flow priority option:") \
    OPTION(SHORT(U), dscp_up,    "dscp-up",              REQARG, TABS2 "Flow priority DSCP UP value.") \
-   OPTION(SHORT(D), dscp_down,  "dscp-down",            REQARG, TABS1 "Flow priority DSCP DOWN value.") )\
- HELP_MSG(                                                          "") \
+   OPTION(SHORT(D), dscp_down,  "dscp-down",            REQARG, TABS1 "Flow priority DSCP DOWN value.") \
+   HELP_MSG(                                                          "") )\
  HELP_MSG(                                                          " Prefer failure option:") \
  OPTION(SHORT(P), pfailure,    "prefer-failure",      NOARG, TABS1 "Add prefer failure option to MAP opcode")\
  HELP_MSG(                                                          "") \
@@ -197,7 +196,7 @@ typedef pcp_deviceid_option_t pcp_app_deviceid_t;
                                                               TABS4 "have following format [ip_address/prefix]:port") \
  HELP_MSG(                                                          "") \
  HELP_MSG(                                                          " Third party option:") \
- OPTION(SHORT(3), thirdparty,   "third-party",         REQARG, TABS2 "Third-party IP address to send on behalf of.") \
+ OPTION(SHORT(3), thirdparty,   "third-party",         REQARG, TABS1 "Third-party IP address to send on behalf of.") \
  HELP_MSG(                                                          "") \
  IFDEF(PCP_EXPERIMENTAL, \
    HELP_MSG(                                                          " Metadata option:") \
@@ -210,15 +209,16 @@ typedef pcp_deviceid_option_t pcp_app_deviceid_t;
    OPTION(NOSHORT,  dev_id,     "device-id",            NOARG , TABS1 "System Dependent. Usually Sysname + Machine Name")\
    OPTION(NOSHORT,  location,   "location",             NOARG , TABS1 "Latitude and Longitude.")\
    OPTION(NOSHORT,  user_id,    "user-id",              REQARG, TABS2 "user@domain")\
-   HELP_MSG(                                                          "") )\
+   HELP_MSG(                                                          "") ) \
  IFDEF(PCP_SADSCP, \
-   HELP_MSG(                                                          "Learn DSCP(SADSCP operation):") \
-   HELP_MSG(                                                    TABS4 "Get DSCP value from PCP server for") \
-   HELP_MSG(                                                    TABS4 "jitter/loss/delay tolerances and/or app name.") \
-   OPTION(SHORT(J), sadscp_jit, "jitter-tolerance",     REQARG,       "Jitter tolerance (DEFAULT:3).")\
-   OPTION(SHORT(L), sadscp_los, "loss-tolerance",       REQARG, TABS1 "Loss tolerance (DEFAULT:3).")\
-   OPTION(SHORT(E), sadscp_del, "delay-tolerance",      REQARG, TABS1 "Delay tolerance (DEFAULT:3).")\
-   OPTION(SHORT(A), sadscp_app, "app-name",             REQARG, TABS1 "Application name.") )\
+   HELP_MSG(                                                          "Learn DSCP (SADSCP operation):") \
+   HELP_MSG(                                                          " Get DSCP value from PCP server for jitter/loss/delay tolerances and/or") \
+   HELP_MSG(                                                          " app name.") \
+   OPTION(SHORT(J), sadscp_jit, "jitter-tolerance",     REQARG,       "Jitter tolerance (default 3).") \
+   OPTION(SHORT(L), sadscp_los, "loss-tolerance",       REQARG, TABS1 "Loss tolerance (default 3).") \
+   OPTION(SHORT(E), sadscp_del, "delay-tolerance",      REQARG, TABS1 "Delay tolerance (default 3).") \
+   OPTION(SHORT(A), sadscp_app, "app-name",             REQARG, TABS1 "Application name.") \
+   HELP_MSG(                                                          "") ) \
 
 
 #define STRUCT_OPTION(a, b, c, d, e) {c, d, 0, 0},
