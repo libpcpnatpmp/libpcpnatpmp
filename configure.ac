@@ -1,6 +1,6 @@
-AC_INIT([pcp-client], [2.0], [aeon@cisco.com])
-AC_CANONICAL_SYSTEM
-AC_PREREQ([2.62])
+AC_INIT([pcp-client],[2.0],[aeon@cisco.com])
+AC_CANONICAL_TARGET
+AC_PREREQ([2.71])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign color-tests subdir-objects])
 #AM_SUBDIR_OBJECTS([yes])
 AM_PROG_AR
@@ -97,9 +97,8 @@ AC_CHECK_MEMBER([struct sockaddr.sa_len],
 
 
 AC_MSG_CHECKING([for struct sockaddr_storage])
-AC_TRY_COMPILE([ #include <sys/types.h>
-#include <sys/socket.h>], [struct sockaddr_storage s; s],
-  have_sockaddr_storage=yes, have_sockaddr_storage=no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ #include <sys/types.h>
+#include <sys/socket.h>]], [[struct sockaddr_storage s; s]])],[have_sockaddr_storage=yes],[have_sockaddr_storage=no])
 if test "$have_sockaddr_storage" = "yes" ; then
   AC_DEFINE(HAVE_SOCKADDR_STORAGE,1,[Whether you have struct sockaddr_storage])
   AC_MSG_RESULT(yes)
@@ -186,7 +185,7 @@ AC_DEFINE([PCP_RETX_MRC], 3, [Maximum retransmission count (0 indicates no maxim
 AC_DEFINE([PCP_RETX_MRT], 1024000, [Maximum retransmission time])
 AC_DEFINE([PCP_RETX_MRD], 0, [Maximum retransmission duration (0 indicates no maximum)])
 
-AC_PROG_LIBTOOL
+LT_INIT
 
 AC_ARG_ENABLE([silent-rules],
   [AS_HELP_STRING([--enable-silent-rules],
