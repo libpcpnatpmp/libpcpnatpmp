@@ -22,3 +22,5 @@ echo "Running libtoolize..." ; (libtoolize --copy --automake || glibtoolize --au
 echo "Running automake..." ; automake --add-missing --copy --gnu || exit 1
 
 [ -f configure.ac.orig ] && mv configure.ac.orig configure.ac
+
+exit 0
