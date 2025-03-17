@@ -68,7 +68,7 @@ struct pcp_ctx_s;
 
 extern pcp_socket_vt_t default_socket_vt;
 
-void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
+void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port, uint32_t *dst_scope_id,
         struct sockaddr *src);
 
 void pcp_fill_sockaddr(struct sockaddr *dst, struct in6_addr *sip,

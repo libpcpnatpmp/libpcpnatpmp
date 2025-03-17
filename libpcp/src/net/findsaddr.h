@@ -30,6 +30,6 @@ const char *findsaddr(register const struct sockaddr_in *to,
         struct in6_addr *from);
 
 const char *findsaddr6(register const struct sockaddr_in6 *to,
-        register struct in6_addr *from);
+        register struct in6_addr *from, uint32_t *from_scope_id);
 
 #endif //FINDSADDR_UDP_H_

@@ -112,7 +112,7 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s)
             (void *)&((struct sockaddr_in6*) &s->pcp_server_saddr)->sin6_addr,
             s->pcp_server_paddr, sizeof(s->pcp_server_paddr));
 
-    err=findsaddr6((struct sockaddr_in6*)&s->pcp_server_saddr, &src_ip);
+    err=findsaddr6((struct sockaddr_in6*)&s->pcp_server_saddr, &src_ip, NULL);
     if (err) {
         PCP_LOG(PCP_LOGLVL_WARN,
                 "Error (%s) occurred while registering a new "
@@ -150,7 +150,7 @@ void psd_add_gws(pcp_ctx_t *ctx)
         if (IN6_IS_ADDR_UNSPECIFIED(&gw->sin6_addr))
             continue;
 
-        if (get_pcp_server_by_ip(ctx, &gw->sin6_addr))
+        if (get_pcp_server_by_ip(ctx, &gw->sin6_addr, gw->sin6_scope_id))
             continue;
 
         pcps_indx=pcp_new_server(ctx, &gw->sin6_addr, ntohs(PCP_SERVER_PORT), gw->sin6_scope_id);
@@ -199,7 +199,7 @@ pcp_errno psd_add_pcp_server(pcp_ctx_t *ctx, struct sockaddr *sa,
         pcp_port=ntohs(PCP_SERVER_PORT);
     }
 
-    pcps=get_pcp_server_by_ip(ctx, (struct in6_addr *)&pcp_ip);
+    pcps=get_pcp_server_by_ip(ctx, (struct in6_addr *)&pcp_ip, scope_id);
     if (!pcps) {
         int pcps_indx=pcp_new_server(ctx, &pcp_ip, pcp_port, scope_id);
 

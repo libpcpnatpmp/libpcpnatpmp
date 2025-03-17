@@ -1275,6 +1275,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
 
     if (read_msg(ctx, msg) == PCP_ERR_SUCCESS) {
         struct in6_addr ip6;
+        uint32_t scope_id;
         pcp_server_t *s;
         struct hserver_iter_data param={NULL, pcpe_io_event};
 
@@ -1290,16 +1291,18 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
             goto process_timeouts;
         }
 
-        pcp_fill_in6_addr(&ip6, NULL, (struct sockaddr*)&msg->rcvd_from_addr);
-        s=get_pcp_server_by_ip(ctx, &ip6);
+        pcp_fill_in6_addr(&ip6, NULL, &scope_id, (struct sockaddr*)&msg->rcvd_from_addr);
+        PCP_LOG(PCP_LOGLVL_DEBUG,"SCOPE_ID: %u", scope_id);
+        s=get_pcp_server_by_ip(ctx, &ip6, scope_id);
 
         if (s) {
             PCP_LOG(PCP_LOGLVL_DEBUG,"Found server: %s", s->pcp_server_paddr);
             msg->pcp_server_indx=s->index;
             memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
-            pcp_fill_in6_addr(&msg->kd.src_ip, NULL, (struct sockaddr*)&msg->rcvd_to_addr);
+            pcp_fill_in6_addr(&msg->kd.src_ip, NULL, &msg->kd.scope_id, (struct sockaddr*)&msg->rcvd_to_addr);
             if (IN6_IS_ADDR_UNSPECIFIED(&msg->kd.src_ip)) {
                 memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
+                msg->kd.scope_id = scope_id;
             }
             if (msg->recv_version < 2) {
                 memcpy(&msg->kd.nonce, &s->nonce, sizeof(struct pcp_nonce));
@@ -1360,7 +1363,7 @@ static void flow_change_notify(pcp_flow_t *flow, pcp_fstate_e state)
 
     if (ctx->flow_change_cb_fun) {
         pcp_fill_sockaddr((struct sockaddr*)&src_addr, &flow->kd.src_ip,
-                flow->kd.map_peer.src_port, 0, 0/* scope_id */);
+                flow->kd.map_peer.src_port, 0, flow->kd.scope_id);
         if (state == pcp_state_succeeded) {
             pcp_fill_sockaddr((struct sockaddr*)&ext_addr,
                     &flow->map_peer.ext_ip, flow->map_peer.ext_port, 0,

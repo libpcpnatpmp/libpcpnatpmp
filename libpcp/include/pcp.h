@@ -246,6 +246,7 @@ typedef struct pcp_flow_info {
     uint8_t          pcp_result_code;
     struct in6_addr  int_ip;
     uint16_t         int_port;     //network byte order
+    uint32_t         int_scope_id;
     struct in6_addr  dst_ip;
     uint16_t         dst_port;     //network byte order
     uint8_t          protocol;

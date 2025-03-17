@@ -108,7 +108,7 @@ int pcp_win_sock_cleanup()
 #endif
 
 void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
-        struct sockaddr *src)
+        uint32_t *dst_scope_id, struct sockaddr *src)
 {
     if (src->sa_family == AF_INET) {
         struct sockaddr_in *src_ip4=(struct sockaddr_in *)src;
@@ -128,6 +128,9 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
         if (dst_port) {
             *dst_port=src_ip4->sin_port;
         }
+        if (dst_scope_id) {
+            *dst_scope_id = 0;
+        }
     } else if (src->sa_family == AF_INET6) {
         struct sockaddr_in6 *src_ip6=(struct sockaddr_in6 *)src;
 
@@ -136,6 +139,9 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
         }
         if (dst_port) {
             *dst_port=src_ip6->sin6_port;
+        }
+        if (dst_scope_id) {
+            *dst_scope_id = src_ip6->sin6_scope_id;
         }
     }
 }

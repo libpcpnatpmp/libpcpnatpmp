@@ -111,7 +111,7 @@ err:
 }
 
 const char *findsaddr6(register const struct sockaddr_in6 *to,
-        register struct in6_addr *from)
+        register struct in6_addr *from, uint32_t *from_scope_id)
 {
     const char *errstr;
     struct sockaddr_in6 cto, cfrom;
@@ -156,6 +156,9 @@ const char *findsaddr6(register const struct sockaddr_in6 *to,
     }
 
     memcpy(from->s6_addr, cfrom.sin6_addr.s6_addr, sizeof(struct in6_addr));
+    if (from_scope_id) {
+        *from_scope_id = cfrom.sin6_scope_id;
+    }
 
 err:
     (void) CLOSE(s);

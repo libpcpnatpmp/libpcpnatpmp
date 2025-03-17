@@ -297,7 +297,7 @@ static inline void init_flow(pcp_flow_t *f, pcp_server_t *s, int lifetime,
         switch (f->kd.operation) {
           case PCP_OPCODE_MAP:
           case PCP_OPCODE_PEER:
-              pcp_fill_in6_addr(&f->map_peer.ext_ip, &f->map_peer.ext_port,
+              pcp_fill_in6_addr(&f->map_peer.ext_ip, &f->map_peer.ext_port, NULL,
                   ext_addr);
               break;
           default:
@@ -417,7 +417,7 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
     if ((!src_addr) || (!ctx)) {
         return NULL;
     }
-    pcp_fill_in6_addr(&kd.src_ip, &kd.map_peer.src_port, src_addr);
+    pcp_fill_in6_addr(&kd.src_ip, &kd.map_peer.src_port, &kd.scope_id, src_addr);
 
     kd.map_peer.protocol=protocol;
 
@@ -442,14 +442,14 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
     }
 
     if (dst_addr) {
-        pcp_fill_in6_addr(&kd.map_peer.dst_ip, &kd.map_peer.dst_port, dst_addr);
+        pcp_fill_in6_addr(&kd.map_peer.dst_ip, &kd.map_peer.dst_port, NULL, dst_addr);
         kd.operation=PCP_OPCODE_PEER;
         if (src_addr->sa_family == AF_INET) {
             if (S6_ADDR32(&kd.src_ip)[3] == INADDR_ANY) {
                 findsaddr((struct sockaddr_in*)dst_addr, &kd.src_ip);
             }
         } else if (IN6_IS_ADDR_UNSPECIFIED(&kd.src_ip)) {
-            findsaddr6((struct sockaddr_in6*)dst_addr, &kd.src_ip);
+            findsaddr6((struct sockaddr_in6*)dst_addr, &kd.src_ip, &kd.scope_id);
         } else if (dst_addr->sa_family != src_addr->sa_family) {
             PCP_LOG(PCP_LOGLVL_PERR, "%s",
                     "Socket family mismatch.");
@@ -517,7 +517,7 @@ void pcp_flow_set_3rd_party_opt(pcp_flow_t *f, struct sockaddr *thirdp_addr)
 
     for (fiter=f; fiter != NULL; fiter=fiter->next_child) {
         fiter->third_party_option_present=1;
-        pcp_fill_in6_addr(&fiter->third_party_ip, NULL, thirdp_addr);
+        pcp_fill_in6_addr(&fiter->third_party_ip, NULL, NULL, thirdp_addr);
         pcp_flow_updated(fiter);
     }
 }
@@ -531,7 +531,7 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
         if (!fiter->filter_option_present) {
             fiter->filter_option_present=1;
         }
-        pcp_fill_in6_addr(&fiter->filter_ip, &fiter->filter_port, filter_ip);
+        pcp_fill_in6_addr(&fiter->filter_ip, &fiter->filter_port, NULL, filter_ip);
         fiter->filter_prefix=filter_prefix;
         pcp_flow_updated(fiter);
     }
@@ -725,6 +725,7 @@ pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count)
         memcpy(&info_iter->int_ip, &fiter->kd.src_ip, sizeof(struct in6_addr));
         memcpy(&info_iter->pcp_server_ip, &fiter->kd.pcp_server_ip,
                 sizeof(info_iter->pcp_server_ip));
+        info_iter->int_scope_id = fiter->kd.scope_id;
         if ((fiter->kd.operation == PCP_OPCODE_MAP)
                 || (fiter->kd.operation == PCP_OPCODE_PEER)) {
             memcpy(&info_iter->dst_ip, &fiter->kd.map_peer.dst_ip,
