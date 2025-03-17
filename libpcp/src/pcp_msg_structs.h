@@ -27,46 +27,46 @@
 #define PCP_MSG_STRUCTS_H_
 
 #ifdef _MSC_VER
-#pragma warning (push)
-#pragma warning (disable:4200)
+#pragma warning(push)
+#pragma warning(disable : 4200)
 #endif // _MSC_VER
-#define PCP_MAX_LEN          1100
-#define PCP_OPCODE_ANNOUNCE     0
-#define PCP_OPCODE_MAP          1
-#define PCP_OPCODE_PEER         2
-#define PCP_OPCODE_SADSCP       3
-#define NATPMP_OPCODE_ANNOUNCE  0
-#define NATPMP_OPCODE_MAP_UDP   1
-#define NATPMP_OPCODE_MAP_TCP   2
+#define PCP_MAX_LEN 1100
+#define PCP_OPCODE_ANNOUNCE 0
+#define PCP_OPCODE_MAP 1
+#define PCP_OPCODE_PEER 2
+#define PCP_OPCODE_SADSCP 3
+#define NATPMP_OPCODE_ANNOUNCE 0
+#define NATPMP_OPCODE_MAP_UDP 1
+#define NATPMP_OPCODE_MAP_TCP 2
 
 /* Possible response codes sent by server, as a result of client request*/
-#define PCP_RES_SUCCESS                   0
-#define PCP_RES_UNSUPP_VERSION            1
-#define PCP_RES_NOT_AUTHORIZED            2
-#define PCP_RES_MALFORMED_REQUEST         3
-#define PCP_RES_UNSUPP_OPCODE             4
-#define PCP_RES_UNSUPP_OPTION             5
-#define PCP_RES_MALFORMED_OPTION          6
-#define PCP_RES_NETWORK_FAILURE           7
-#define PCP_RES_NO_RESOURCES              8
-#define PCP_RES_UNSUPP_PROTOCOL           9
-#define PCP_RES_USER_EX_QUOTA             10
-#define PCP_RES_CANNOT_PROVIDE_EXTERNAL   11
-#define PCP_RES_ADDRESS_MISMATCH          12
-#define PCP_RES_EXCESSIVE_REMOTE_PEERS    13
+#define PCP_RES_SUCCESS 0
+#define PCP_RES_UNSUPP_VERSION 1
+#define PCP_RES_NOT_AUTHORIZED 2
+#define PCP_RES_MALFORMED_REQUEST 3
+#define PCP_RES_UNSUPP_OPCODE 4
+#define PCP_RES_UNSUPP_OPTION 5
+#define PCP_RES_MALFORMED_OPTION 6
+#define PCP_RES_NETWORK_FAILURE 7
+#define PCP_RES_NO_RESOURCES 8
+#define PCP_RES_UNSUPP_PROTOCOL 9
+#define PCP_RES_USER_EX_QUOTA 10
+#define PCP_RES_CANNOT_PROVIDE_EXTERNAL 11
+#define PCP_RES_ADDRESS_MISMATCH 12
+#define PCP_RES_EXCESSIVE_REMOTE_PEERS 13
 
 typedef enum pcp_options {
-    PCP_OPTION_3RD_PARTY=1,
-    PCP_OPTION_PREF_FAIL=2,
-    PCP_OPTION_FILTER=3,
-    PCP_OPTION_DEVICEID=96, /*private range */
-    PCP_OPTION_LOCATION=97,
-    PCP_OPTION_USERID=98,
-    PCP_OPTION_FLOW_PRIORITY=99,
-    PCP_OPTION_METADATA=100
+    PCP_OPTION_3RD_PARTY = 1,
+    PCP_OPTION_PREF_FAIL = 2,
+    PCP_OPTION_FILTER = 3,
+    PCP_OPTION_DEVICEID = 96, /*private range */
+    PCP_OPTION_LOCATION = 97,
+    PCP_OPTION_USERID = 98,
+    PCP_OPTION_FLOW_PRIORITY = 99,
+    PCP_OPTION_METADATA = 100
 } pcp_options_t;
 
-#pragma pack(push,1)
+#pragma pack(push, 1)
 
 #ifndef MAX_USER_ID
 #define MAX_USER_ID 512
@@ -228,8 +228,8 @@ typedef struct pcp_location_option {
     uint8_t option;
     uint8_t reserved;
     uint16_t len;
-    //float   latitude;
-    //float   longitude;
+    // float   latitude;
+    // float   longitude;
     char location[MAX_GEO_STR];
 } pcp_location_option_t;
 
@@ -248,17 +248,15 @@ typedef struct pcp_deviceid_option {
     char deviceid[MAX_DEVICE_ID];
 } pcp_deviceid_option_t;
 
-#define FOREACH_DEVICE(DEVICE) \
-        DEVICE(smartphone)  \
-        DEVICE(iphone)   \
-        DEVICE(unknown)
+#define FOREACH_DEVICE(DEVICE)                                                 \
+    DEVICE(smartphone)                                                         \
+    DEVICE(iphone)                                                             \
+    DEVICE(unknown)
 
 #define GENERATE_ENUM(ENUM) ENUM,
-#define GENERATE_STRING(STRING) #STRING ,
+#define GENERATE_STRING(STRING) #STRING,
 
-typedef enum DEVICE_ENUM {
-    FOREACH_DEVICE(GENERATE_ENUM)
-} device_enum_e;
+typedef enum DEVICE_ENUM { FOREACH_DEVICE(GENERATE_ENUM) } device_enum_e;
 
 typedef struct pcp_prefer_fail_option {
     uint8_t option;
@@ -292,11 +290,11 @@ typedef struct pcp_flow_priority_option {
     uint16_t len;
     uint8_t dscp_up;
     uint8_t dscp_down;
-#define PCP_DSCP_MASK ((1<<6)-1)
+#define PCP_DSCP_MASK ((1 << 6) - 1)
     uint8_t reserved2;
     /* most significant bit is used for response */
     uint8_t response_bit;
-//#define PCP_FLOW_OPTION_RESP_P (1<<7)
+    //#define PCP_FLOW_OPTION_RESP_P (1<<7)
     uint8_t next_data[0];
 } pcp_flow_priority_option_t;
 
@@ -311,6 +309,6 @@ typedef struct pcp_metadata_option {
 #pragma pack(pop)
 
 #ifdef _MSC_VER
-#pragma warning (pop)
+#pragma warning(pop)
 #endif // _MSC_VER
 #endif /* PCP_MSG_STRUCTS_H_ */

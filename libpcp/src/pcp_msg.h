@@ -29,15 +29,15 @@
 #ifdef WIN32
 //#include <winsock2.h>
 #include "stdint.h"
-#else //WIN32
-#include <sys/socket.h>
+#else // WIN32
 #include <stdint.h>
+#include <sys/socket.h>
 #endif
 
 #include "pcp.h"
-#include "pcp_utils.h"
 #include "pcp_client_db.h"
 #include "pcp_msg_structs.h"
+#include "pcp_utils.h"
 
 void *build_pcp_msg(struct pcp_flow_s *flow);
 

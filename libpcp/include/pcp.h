@@ -27,17 +27,17 @@
 #define PCP_H
 
 #ifdef WIN32
-#include <winsock2.h>
 #include <in6addr.h>
-#include <ws2tcpip.h>
 #include <time.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #if !defined ssize_t && defined _MSC_VER
 typedef int ssize_t;
 #endif
-#else //WIN32
-#include <sys/time.h>
-#include <sys/socket.h>
+#else // WIN32
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #endif
 
 #include <stdint.h>
@@ -48,46 +48,46 @@ extern "C" {
 
 #ifdef PCP_SOCKET_IS_VOIDPTR
 #define PCP_SOCKET void *
-#else //PCP_SOCKET_IS_VOIDPTR
+#else // PCP_SOCKET_IS_VOIDPTR
 #ifdef WIN32
 #define PCP_SOCKET SOCKET
-#else //WIN32
+#else // WIN32
 #define PCP_SOCKET int
-#endif //WIN32
-#endif //PCP_SOCKET_IS_VOIDPTR
+#endif // WIN32
+#endif // PCP_SOCKET_IS_VOIDPTR
 
 #ifdef PCP_EXPERIMENTAL
 typedef struct pcp_userid_option *pcp_userid_option_p;
 typedef struct pcp_deviceid_option *pcp_deviceid_option_p;
 typedef struct pcp_location_option *pcp_location_option_p;
-#endif //PCP_EXPERIMENTAL
+#endif // PCP_EXPERIMENTAL
 
 typedef enum {
-    PCP_ERR_SUCCESS=0,
-    PCP_ERR_MAX_SIZE=-1,
-    PCP_ERR_OPT_ALREADY_PRESENT=-2,
-    PCP_ERR_BAD_AFINET=-3,
-    PCP_ERR_SEND_FAILED=-4,
-    PCP_ERR_RECV_FAILED=-5,
-    PCP_ERR_UNSUP_VERSION=-6,
-    PCP_ERR_NO_MEM=-7,
-    PCP_ERR_BAD_ARGS=-8,
-    PCP_ERR_UNKNOWN=-9,
-    PCP_ERR_SHORT_LIFETIME_ERR=-10,
-    PCP_ERR_TIMEOUT=-11,
-    PCP_ERR_NOT_FOUND=-12,
-    PCP_ERR_WOULDBLOCK=-13,
-    PCP_ERR_ADDRINUSE=-14
+    PCP_ERR_SUCCESS = 0,
+    PCP_ERR_MAX_SIZE = -1,
+    PCP_ERR_OPT_ALREADY_PRESENT = -2,
+    PCP_ERR_BAD_AFINET = -3,
+    PCP_ERR_SEND_FAILED = -4,
+    PCP_ERR_RECV_FAILED = -5,
+    PCP_ERR_UNSUP_VERSION = -6,
+    PCP_ERR_NO_MEM = -7,
+    PCP_ERR_BAD_ARGS = -8,
+    PCP_ERR_UNKNOWN = -9,
+    PCP_ERR_SHORT_LIFETIME_ERR = -10,
+    PCP_ERR_TIMEOUT = -11,
+    PCP_ERR_NOT_FOUND = -12,
+    PCP_ERR_WOULDBLOCK = -13,
+    PCP_ERR_ADDRINUSE = -14
 } pcp_errno;
 
 /* DEBUG levels */
 typedef enum {
-    PCP_LOGLVL_NONE=0,
-    PCP_LOGLVL_ERR=1,
-    PCP_LOGLVL_WARN=2,
-    PCP_LOGLVL_INFO=3,
-    PCP_LOGLVL_PERR=4,
-    PCP_LOGLVL_DEBUG=5
+    PCP_LOGLVL_NONE = 0,
+    PCP_LOGLVL_ERR = 1,
+    PCP_LOGLVL_WARN = 2,
+    PCP_LOGLVL_INFO = 3,
+    PCP_LOGLVL_PERR = 4,
+    PCP_LOGLVL_DEBUG = 5
 } pcp_loglvl_e;
 
 typedef void (*external_logger)(pcp_loglvl_e, const char *);
@@ -103,27 +103,29 @@ typedef struct pcp_ctx_s pcp_ctx_t;
 typedef struct pcp_socket_vt_s {
     PCP_SOCKET (*sock_create)(int domain, int type, int protocol);
     ssize_t (*sock_recvfrom)(PCP_SOCKET sockfd, void *buf, size_t len,
-            int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
+                             int flags, struct sockaddr *src_addr,
+                             socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
     ssize_t (*sock_sendto)(PCP_SOCKET sockfd, const void *buf, size_t len,
-            int flags, const struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen);
+                           int flags, const struct sockaddr_in6 *src_addr,
+                           struct sockaddr *dest_addr, socklen_t addrlen);
     int (*sock_close)(PCP_SOCKET sockfd);
 } pcp_socket_vt_t;
 
 /*
  * Initialize library, optionally initiate auto-discovery of PCP servers
  *    autodiscovery  - enable/disable auto-discovery of PCP servers
- *    socket_vt      - optional - virt. table to override default socket functions.
- *                     Pointer has to be valid until pcp_terminate is called.
- *                     Pass NULL to use default socket functions
- *    return value   - pcp context used in other functions.
+ *    socket_vt      - optional - virt. table to override default socket
+ * functions. Pointer has to be valid until pcp_terminate is called. Pass NULL
+ * to use default socket functions return value   - pcp context used in other
+ * functions.
  */
-#define ENABLE_AUTODISCOVERY  1
+#define ENABLE_AUTODISCOVERY 1
 #define DISABLE_AUTODISCOVERY 0
 pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt);
 
-//returns internal pcp server ID, -1 => error occurred
+// returns internal pcp server ID, -1 => error occurred
 int pcp_add_server(pcp_ctx_t *ctx, struct sockaddr *pcp_server,
-        uint8_t pcp_version);
+                   uint8_t pcp_version);
 
 /*
  * Close socket fds and clean up all settings, frees all library buffers
@@ -147,8 +149,8 @@ void pcp_terminate(pcp_ctx_t *ctx, int close_flows);
  *  pcp_flow_t *used in other functions to reference this flow.
  */
 pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
-        struct sockaddr *dst_addr, struct sockaddr *ext_addr, uint8_t protocol,
-        uint32_t lifetime, void *userdata);
+                         struct sockaddr *dst_addr, struct sockaddr *ext_addr,
+                         uint8_t protocol, uint32_t lifetime, void *userdata);
 
 void pcp_flow_set_lifetime(pcp_flow_t *f, uint32_t lifetime);
 
@@ -190,7 +192,8 @@ void pcp_flow_set_flowp(pcp_flow_t *f, uint8_t dscp_up, uint8_t dscp_down);
  * if exists md with given id then replace with new value
  * if value is NULL then remove metadata with this id
  */
-void pcp_flow_add_md(pcp_flow_t *f, uint32_t md_id, void *value, size_t val_len);
+void pcp_flow_add_md(pcp_flow_t *f, uint32_t md_id, void *value,
+                     size_t val_len);
 
 int pcp_flow_set_userid(pcp_flow_t *f, pcp_userid_option_p userid);
 int pcp_flow_set_deviceid(pcp_flow_t *f, pcp_deviceid_option_p dev);
@@ -201,7 +204,7 @@ int pcp_flow_set_location(pcp_flow_t *f, pcp_location_option_p loc);
  * Append filter option.
  */
 void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
-        uint8_t filter_prefix);
+                             uint8_t filter_prefix);
 
 /*
  * Append prefer failure option.
@@ -214,7 +217,7 @@ void pcp_flow_set_prefer_failure_opt(pcp_flow_t *f);
  * correct DSCP values to get desired flow treatment by router.
  */
 pcp_flow_t *pcp_learn_dscp(pcp_ctx_t *ctx, uint8_t delay_tol, uint8_t loss_tol,
-        uint8_t jitter_tol, char *app_name);
+                           uint8_t jitter_tol, char *app_name);
 #endif
 
 /*
@@ -237,32 +240,34 @@ typedef enum {
 } pcp_fstate_e;
 
 typedef struct pcp_flow_info {
-    pcp_fstate_e     result;
-    struct in6_addr  pcp_server_ip;
-    struct in6_addr  ext_ip;
-    uint16_t         ext_port;     //network byte order
-    time_t           recv_lifetime_end;
-    time_t           lifetime_renew_s;
-    uint8_t          pcp_result_code;
-    struct in6_addr  int_ip;
-    uint16_t         int_port;     //network byte order
-    uint32_t         int_scope_id;
-    struct in6_addr  dst_ip;
-    uint16_t         dst_port;     //network byte order
-    uint8_t          protocol;
-    uint8_t          learned_dscp; //relevant only for flow created by pcp_learn_dscp
+    pcp_fstate_e result;
+    struct in6_addr pcp_server_ip;
+    struct in6_addr ext_ip;
+    uint16_t ext_port; // network byte order
+    time_t recv_lifetime_end;
+    time_t lifetime_renew_s;
+    uint8_t pcp_result_code;
+    struct in6_addr int_ip;
+    uint16_t int_port; // network byte order
+    uint32_t int_scope_id;
+    struct in6_addr dst_ip;
+    uint16_t dst_port; // network byte order
+    uint8_t protocol;
+    uint8_t learned_dscp; // relevant only for flow created by pcp_learn_dscp
 } pcp_flow_info_t;
 
-// Allocates info_buf by malloc, has to be freed by client when no longer needed.
+// Allocates info_buf by malloc, has to be freed by client when no longer
+// needed.
 pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count);
 
-//callback function type - called when flow state has changed
+// callback function type - called when flow state has changed
 typedef void (*pcp_flow_change_notify)(pcp_flow_t *f, struct sockaddr *src_addr,
-        struct sockaddr *ext_addr, pcp_fstate_e, void *cb_arg);
+                                       struct sockaddr *ext_addr, pcp_fstate_e,
+                                       void *cb_arg);
 
-//set flow state change notify callback function
+// set flow state change notify callback function
 void pcp_set_flow_change_cb(pcp_ctx_t *ctx, pcp_flow_change_notify cb_fun,
-        void *cb_arg);
+                            void *cb_arg);
 
 /* evaluate flow state
  * params:
@@ -292,7 +297,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout);
  */
 PCP_SOCKET pcp_get_socket(pcp_ctx_t *ctx);
 
-//example of pcp_pulse and pcp_get_socket use in select loop:
+// example of pcp_pulse and pcp_get_socket use in select loop:
 /*
  pcp_ctx_t *ctx=pcp_init(1, NULL);
  int sock=pcp_get_socket(ctx);

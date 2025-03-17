@@ -33,67 +33,65 @@
 #define _CRT_SECURE_NO_WARNINGS 1
 #endif
 
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 #include "pcp.h"
 #include "pcp_logger.h"
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #ifdef _MSC_VER
 #include "pcp_gettimeofday.h" //gettimeofday()
 #else
 #include "sys/time.h"
 #endif //_MSC_VER
-pcp_loglvl_e pcp_log_level=PCP_MAX_LOG_LEVEL;
+pcp_loglvl_e pcp_log_level = PCP_MAX_LOG_LEVEL;
 
-void pcp_logger_init(void)
-{
+void pcp_logger_init(void) {
     char *env, *ret;
 
-    if ((env=getenv("PCP_LOG_LEVEL"))) {
-        long lvl=strtol(env, &ret, 0);
-        if ((ret) && (!*ret) && (lvl>=0) && (lvl<=PCP_MAX_LOG_LEVEL)) {
-            pcp_log_level=lvl;
+    if ((env = getenv("PCP_LOG_LEVEL"))) {
+        long lvl = strtol(env, &ret, 0);
+        if ((ret) && (!*ret) && (lvl >= 0) && (lvl <= PCP_MAX_LOG_LEVEL)) {
+            pcp_log_level = lvl;
         }
     }
 }
 
-static void default_logfn(pcp_loglvl_e mode, const char *msg)
-{
+static void default_logfn(pcp_loglvl_e mode, const char *msg) {
 
     const char *prefix;
-    static struct timeval prev_timestamp={0, 0};
+    static struct timeval prev_timestamp = {0, 0};
     struct timeval cur_timestamp;
     uint64_t diff;
 
     gettimeofday(&cur_timestamp, NULL);
 
     if ((prev_timestamp.tv_sec == 0) && (prev_timestamp.tv_usec == 0)) {
-        prev_timestamp=cur_timestamp;
-        diff=0;
+        prev_timestamp = cur_timestamp;
+        diff = 0;
     } else {
-        diff=(cur_timestamp.tv_sec - prev_timestamp.tv_sec) * 1000000
-                + (cur_timestamp.tv_usec - prev_timestamp.tv_usec);
+        diff = (cur_timestamp.tv_sec - prev_timestamp.tv_sec) * 1000000 +
+               (cur_timestamp.tv_usec - prev_timestamp.tv_usec);
     }
 
     switch (mode) {
-        case PCP_LOGLVL_ERR:
-        case PCP_LOGLVL_PERR:
-            prefix="ERROR";
-            break;
-        case PCP_LOGLVL_WARN:
-            prefix="WARNING";
-            break;
-        case PCP_LOGLVL_INFO:
-            prefix="INFO";
-            break;
-        case PCP_LOGLVL_DEBUG:
-            prefix="DEBUG";
-            break;
-        default:
-            prefix="UNKNOWN";
-            break;
+    case PCP_LOGLVL_ERR:
+    case PCP_LOGLVL_PERR:
+        prefix = "ERROR";
+        break;
+    case PCP_LOGLVL_WARN:
+        prefix = "WARNING";
+        break;
+    case PCP_LOGLVL_INFO:
+        prefix = "INFO";
+        break;
+    case PCP_LOGLVL_DEBUG:
+        prefix = "DEBUG";
+        break;
+    default:
+        prefix = "UNKNOWN";
+        break;
     }
 
     fprintf(stderr, "%3llus %03llums %03lluus %-7s: %s\n",
@@ -102,17 +100,13 @@ static void default_logfn(pcp_loglvl_e mode, const char *msg)
             prefix, msg);
 }
 
-external_logger logger=default_logfn;
+external_logger logger = default_logfn;
 
-void pcp_set_loggerfn(external_logger ext_log)
-{
-    logger=ext_log;
-}
+void pcp_set_loggerfn(external_logger ext_log) { logger = ext_log; }
 
-void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...)
-{
+void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...) {
     int n;
-    int size=256; /* Guess we need no more than 256 bytes. */
+    int size = 256; /* Guess we need no more than 256 bytes. */
     char *p, *np;
     va_list ap;
 
@@ -120,8 +114,8 @@ void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...)
         return;
     }
 
-    if (!(p=(char*)malloc(size))) {
-        return; //LCOV_EXCL_LINE
+    if (!(p = (char *)malloc(size))) {
+        return; // LCOV_EXCL_LINE
     }
 
     while (1) {
@@ -129,7 +123,7 @@ void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...)
         /* Try to print in the allocated space. */
 
         va_start(ap, fmt);
-        n=vsnprintf(p, size, fmt, ap);
+        n = vsnprintf(p, size, fmt, ap);
         va_end(ap);
 
         /* If that worked, return the string. */
@@ -140,17 +134,17 @@ void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...)
 
         /* Else try again with more space. */
 
-        if (n > -1) /* glibc 2.1 */
-            size=n + 1; /* precisely what is needed */
+        if (n > -1)       /* glibc 2.1 */
+            size = n + 1; /* precisely what is needed */
         else
             /* glibc 2.0 */
-            size*=2; /* twice the old size */ //LCOV_EXCL_LINE
+            size *= 2; /* twice the old size */ // LCOV_EXCL_LINE
 
-        if (!(np=(char*)realloc(p, size))) {
-            free(p); //LCOV_EXCL_LINE
-            return; //LCOV_EXCL_LINE
+        if (!(np = (char *)realloc(p, size))) {
+            free(p); // LCOV_EXCL_LINE
+            return;  // LCOV_EXCL_LINE
         }
-        p=np;
+        p = np;
     }
 
     if (logger)
@@ -160,8 +154,7 @@ void pcp_logger(pcp_loglvl_e log_level, const char *fmt, ...)
     return;
 }
 
-void pcp_strerror(int errnum, char *buf, size_t buflen)
-{
+void pcp_strerror(int errnum, char *buf, size_t buflen) {
 
     memset(buf, 0, buflen);
 
@@ -169,8 +162,7 @@ void pcp_strerror(int errnum, char *buf, size_t buflen)
 
     strerror_s(buf, buflen, errnum);
 
-#else //WIN32
+#else  // WIN32
     strerror_r(errnum, buf, buflen);
-#endif //WIN32
+#endif // WIN32
 }
-

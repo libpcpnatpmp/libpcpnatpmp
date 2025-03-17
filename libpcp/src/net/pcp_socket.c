@@ -31,60 +31,61 @@
 #include "default_config.h"
 #endif
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 #ifdef WIN32
 #include "pcp_win_defines.h"
-#else  //WIN32
-#include <sys/socket.h>
+#else // WIN32
 #include <netinet/in.h>
+#include <sys/socket.h>
 #ifndef PCP_SOCKET_IS_VOIDPTR
-#include <unistd.h>
-#include <fcntl.h>
 #include <errno.h>
-#endif //PCP_SOCKET_IS_VOIDPTR
-#endif //!WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif // PCP_SOCKET_IS_VOIDPTR
+#endif //! WIN32
 #include "pcp.h"
-#include "unp.h"
-#include "pcp_utils.h"
 #include "pcp_socket.h"
+#include "pcp_utils.h"
+#include "unp.h"
 
 static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol);
 static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
+                                        int flags, struct sockaddr *src_addr,
+                                        socklen_t *addrlen,
+                                        struct sockaddr_in6 *dst_addr);
 static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
-        size_t len, int flags, const struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen);
+                                      size_t len, int flags,
+                                      const struct sockaddr_in6 *src_addr,
+                                      struct sockaddr *dest_addr,
+                                      socklen_t addrlen);
 static int pcp_socket_close_impl(PCP_SOCKET sock);
 
-pcp_socket_vt_t default_socket_vt={
-        pcp_socket_create_impl,
-        pcp_socket_recvfrom_impl,
-        pcp_socket_sendto_impl,
-        pcp_socket_close_impl
-};
+pcp_socket_vt_t default_socket_vt = {
+    pcp_socket_create_impl, pcp_socket_recvfrom_impl, pcp_socket_sendto_impl,
+    pcp_socket_close_impl};
 
 #ifdef WIN32
 // function calling WSAStartup (used in pcp-server and pcp_app)
-int pcp_win_sock_startup()
-{
+int pcp_win_sock_startup() {
     int err;
     WORD wVersionRequested;
     WSADATA wsaData;
     OSVERSIONINFOEX osvi;
 
     /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
-    wVersionRequested=MAKEWORD(2, 2);
-    err=WSAStartup(wVersionRequested, &wsaData);
+    wVersionRequested = MAKEWORD(2, 2);
+    err = WSAStartup(wVersionRequested, &wsaData);
     if (err != 0) {
         /* Tell the user that we could not find a usable */
         /* Winsock DLL.                                  */
         perror("WSAStartup failed with error");
         return 1;
     }
-    //find windows version
+    // find windows version
     ZeroMemory(&osvi, sizeof(osvi));
-    osvi.dwOSVersionInfoSize=sizeof(osvi);
+    osvi.dwOSVersionInfoSize = sizeof(osvi);
 
     if (!GetVersionEx((LPOSVERSIONINFO)(&osvi))) {
         printf("pcp_app: GetVersionEx failed");
@@ -97,8 +98,7 @@ int pcp_win_sock_startup()
 /* function calling WSACleanup
  *  returns 0 on success and 1 on failure
  */
-int pcp_win_sock_cleanup()
-{
+int pcp_win_sock_cleanup() {
     if (WSACleanup() == PCP_SOCKET_ERROR) {
         printf("WSACleanup failed.\n");
         return 1;
@@ -108,31 +108,30 @@ int pcp_win_sock_cleanup()
 #endif
 
 void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
-        uint32_t *dst_scope_id, struct sockaddr *src)
-{
+                       uint32_t *dst_scope_id, struct sockaddr *src) {
     if (src->sa_family == AF_INET) {
-        struct sockaddr_in *src_ip4=(struct sockaddr_in *)src;
+        struct sockaddr_in *src_ip4 = (struct sockaddr_in *)src;
 
         if (dst_ip6) {
-            S6_ADDR32(dst_ip6)[0]=0;
-            S6_ADDR32(dst_ip6)[1]=0;
-            S6_ADDR32(dst_ip6)[2]=htonl(0xFFFF);
-            S6_ADDR32(dst_ip6)[3]=src_ip4->sin_addr.s_addr;
+            S6_ADDR32(dst_ip6)[0] = 0;
+            S6_ADDR32(dst_ip6)[1] = 0;
+            S6_ADDR32(dst_ip6)[2] = htonl(0xFFFF);
+            S6_ADDR32(dst_ip6)[3] = src_ip4->sin_addr.s_addr;
         }
         if (dst_port) {
-            *dst_port=src_ip4->sin_port;
+            *dst_port = src_ip4->sin_port;
         }
         if (dst_scope_id) {
             *dst_scope_id = 0;
         }
     } else if (src->sa_family == AF_INET6) {
-        struct sockaddr_in6 *src_ip6=(struct sockaddr_in6 *)src;
+        struct sockaddr_in6 *src_ip6 = (struct sockaddr_in6 *)src;
 
         if (dst_ip6) {
             memcpy(dst_ip6, src_ip6->sin6_addr.s6_addr, sizeof(*dst_ip6));
         }
         if (dst_port) {
-            *dst_port=src_ip6->sin6_port;
+            *dst_port = src_ip6->sin6_port;
         }
         if (dst_scope_id) {
             *dst_scope_id = src_ip6->sin6_scope_id;
@@ -141,115 +140,111 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
 }
 
 void pcp_fill_sockaddr(struct sockaddr *dst, struct in6_addr *sip,
-        uint16_t sport, int ret_ipv6_mapped_ipv4, uint32_t scope_id)
-{
+                       uint16_t sport, int ret_ipv6_mapped_ipv4,
+                       uint32_t scope_id) {
     if ((!ret_ipv6_mapped_ipv4) && (IN6_IS_ADDR_V4MAPPED(sip))) {
-        struct sockaddr_in *s=(struct sockaddr_in *)dst;
+        struct sockaddr_in *s = (struct sockaddr_in *)dst;
 
-        s->sin_family=AF_INET;
-        s->sin_addr.s_addr=S6_ADDR32(sip)[3];
-        s->sin_port=sport;
+        s->sin_family = AF_INET;
+        s->sin_addr.s_addr = S6_ADDR32(sip)[3];
+        s->sin_port = sport;
         SET_SA_LEN(s, sizeof(struct sockaddr_in));
     } else {
-        struct sockaddr_in6 *s=(struct sockaddr_in6 *)dst;
+        struct sockaddr_in6 *s = (struct sockaddr_in6 *)dst;
 
-        s->sin6_family=AF_INET6;
-        s->sin6_addr=*sip;
-        s->sin6_port=sport;
-        s->sin6_scope_id=scope_id;
+        s->sin6_family = AF_INET6;
+        s->sin6_addr = *sip;
+        s->sin6_port = sport;
+        s->sin6_scope_id = scope_id;
         SET_SA_LEN(s, sizeof(struct sockaddr_in6));
     }
 }
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
-static pcp_errno pcp_get_error()
-{
+static pcp_errno pcp_get_error() {
 #ifdef WIN32
-    int errnum=WSAGetLastError();
+    int errnum = WSAGetLastError();
 
     switch (errnum) {
-        case WSAEADDRINUSE:
-            return PCP_ERR_ADDRINUSE;
-        case WSAEWOULDBLOCK:
-            return PCP_ERR_WOULDBLOCK;
-        default:
-            return PCP_ERR_UNKNOWN;
+    case WSAEADDRINUSE:
+        return PCP_ERR_ADDRINUSE;
+    case WSAEWOULDBLOCK:
+        return PCP_ERR_WOULDBLOCK;
+    default:
+        return PCP_ERR_UNKNOWN;
     }
 #else
     switch (errno) {
-        case EADDRINUSE:
-            return PCP_ERR_ADDRINUSE;
-//        case EAGAIN:
-        case EWOULDBLOCK:
-            return PCP_ERR_WOULDBLOCK;
-        default:
-            return PCP_ERR_UNKNOWN;
+    case EADDRINUSE:
+        return PCP_ERR_ADDRINUSE;
+        //        case EAGAIN:
+    case EWOULDBLOCK:
+        return PCP_ERR_WOULDBLOCK;
+    default:
+        return PCP_ERR_UNKNOWN;
     }
 #endif
 }
 #endif
 
 PCP_SOCKET pcp_socket_create(struct pcp_ctx_s *ctx, int domain, int type,
-        int protocol)
-{
+                             int protocol) {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_create);
 
     return ctx->virt_socket_tb->sock_create(domain, type, protocol);
 }
 
 ssize_t pcp_socket_recvfrom(struct pcp_ctx_s *ctx, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr)
-{
+                            int flags, struct sockaddr *src_addr,
+                            socklen_t *addrlen, struct sockaddr_in6 *dst_addr) {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_recvfrom);
 
     return ctx->virt_socket_tb->sock_recvfrom(ctx->socket, buf, len, flags,
-            src_addr, addrlen, dst_addr);
+                                              src_addr, addrlen, dst_addr);
 }
 
 ssize_t pcp_socket_sendto(struct pcp_ctx_s *ctx, const void *buf, size_t len,
-        int flags, struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen)
-{
+                          int flags, struct sockaddr_in6 *src_addr,
+                          struct sockaddr *dest_addr, socklen_t addrlen) {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_sendto);
 
     return ctx->virt_socket_tb->sock_sendto(ctx->socket, buf, len, flags,
-            src_addr, dest_addr, addrlen);
+                                            src_addr, dest_addr, addrlen);
 }
 
-int pcp_socket_close(struct pcp_ctx_s *ctx)
-{
+int pcp_socket_close(struct pcp_ctx_s *ctx) {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_close);
 
     return ctx->virt_socket_tb->sock_close(ctx->socket);
 }
 
-static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
-{
+static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
 #ifdef PCP_SOCKET_IS_VOIDPTR
     return PCP_INVALID_SOCKET;
 #else
     PCP_SOCKET s;
     uint32_t flg;
-    unsigned long iMode=1;
+    unsigned long iMode = 1;
     struct sockaddr_storage sas;
-    struct sockaddr_in *sin=(struct sockaddr_in *)&sas;
-    struct sockaddr_in6 *sin6=(struct sockaddr_in6 *)&sas;
+    struct sockaddr_in *sin = (struct sockaddr_in *)&sas;
+    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&sas;
 
     OSDEP(iMode);
     OSDEP(flg);
 
     memset(&sas, 0, sizeof(sas));
-    sas.ss_family=domain;
+    sas.ss_family = domain;
     if (domain == AF_INET) {
-        sin->sin_port=htons(5350);
+        sin->sin_port = htons(5350);
         SET_SA_LEN(sin, sizeof(struct sockaddr_in));
     } else if (domain == AF_INET6) {
-        sin6->sin6_port=htons(5350);
+        sin6->sin6_port = htons(5350);
         SET_SA_LEN(sin6, sizeof(struct sockaddr_in6));
     } else {
         PCP_LOG(PCP_LOGLVL_ERR, "Unsupported socket domain:%d", domain);
     }
 
-    s=(PCP_SOCKET)socket(domain, type, protocol);
+    s = (PCP_SOCKET)socket(domain, type, protocol);
     if (s == PCP_INVALID_SOCKET)
         return PCP_INVALID_SOCKET;
 
@@ -260,8 +255,8 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#else //WIN32
-    flg=fcntl(s, F_GETFL, 0);
+#else // WIN32
+    flg = fcntl(s, F_GETFL, 0);
     if (fcntl(s, F_SETFL, flg | O_NONBLOCK)) {
         PCP_LOG(PCP_LOGLVL_ERR, "%s",
                 "Unable to set nonblocking mode for socket.");
@@ -272,40 +267,41 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
     {
         // Enable usage of IP_PKTINFO
         int optval = 1;
-        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval)) < 0) {
+        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval)) <
+            0) {
             PCP_LOG(PCP_LOGLVL_ERR, "%s",
                     "Unable to set IP_PKTINFO option for socket.");
             CLOSE(s);
             return PCP_INVALID_SOCKET;
         }
-        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval, sizeof(optval)) < 0) {
+        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval,
+                       sizeof(optval)) < 0) {
             PCP_LOG(PCP_LOGLVL_ERR, "%s",
-                "Unable to set IPV6_RECVPKTINFO option for socket.");
+                    "Unable to set IPV6_RECVPKTINFO option for socket.");
             CLOSE(s);
             return PCP_INVALID_SOCKET;
         }
     }
-#endif //IP_PKTINFO && IPV6_RECVPKTINFO
-#endif //!WIN32
+#endif // IP_PKTINFO && IPV6_RECVPKTINFO
+#endif //! WIN32
 #ifdef PCP_USE_IPV6_SOCKET
-    flg=0;
-    if (PCP_SOCKET_ERROR
-            == setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&flg,
-                    sizeof(flg))) {
+    flg = 0;
+    if (PCP_SOCKET_ERROR ==
+        setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, (char *)&flg, sizeof(flg))) {
         PCP_LOG(PCP_LOGLVL_ERR, "%s",
                 "Dual-stack sockets are not supported on this platform. "
                 "Recompile library with disabled IPv6 support.");
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#endif //PCP_USE_IPV6_SOCKET
-    while (bind(s, (struct sockaddr *)&sas,
-            SA_LEN((struct sockaddr *)&sas)) == PCP_SOCKET_ERROR) {
+#endif // PCP_USE_IPV6_SOCKET
+    while (bind(s, (struct sockaddr *)&sas, SA_LEN((struct sockaddr *)&sas)) ==
+           PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_ADDRINUSE) {
             if (sas.ss_family == AF_INET) {
-                sin->sin_port=htons(ntohs(sin->sin_port) + 1);
+                sin->sin_port = htons(ntohs(sin->sin_port) + 1);
             } else {
-                sin6->sin6_port=htons(ntohs(sin6->sin6_port) + 1);
+                sin6->sin6_port = htons(ntohs(sin6->sin6_port) + 1);
             }
         } else {
             PCP_LOG(PCP_LOGLVL_ERR, "%s", "bind error");
@@ -318,10 +314,11 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
 #endif
 }
 
-static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
-        size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr)
-{
-    ssize_t ret=-1;
+static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
+                                        int flags, struct sockaddr *src_addr,
+                                        socklen_t *addrlen,
+                                        struct sockaddr_in6 *dst_addr) {
+    ssize_t ret = -1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
 #if defined(IPV6_PKTINFO) && defined(IP_PKTINFO)
@@ -349,7 +346,8 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
     ret = recvmsg(sock, &msg, 0);
 
     // Processing control message
-    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+         cmsg = CMSG_NXTHDR(&msg, cmsg)) {
         if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
             pktinfo = (struct in_pktinfo *)CMSG_DATA(cmsg);
             S6_ADDR32(&dst_addr->sin6_addr)[0] = 0;
@@ -359,7 +357,8 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
             dst_addr->sin6_scope_id = 0;
             dst_addr->sin6_family = AF_INET6;
         }
-        if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+        if (cmsg->cmsg_level == IPPROTO_IPV6 &&
+            cmsg->cmsg_type == IPV6_PKTINFO) {
             pktinfo6 = (struct in6_pktinfo *)CMSG_DATA(cmsg);
             IPV6_ADDR_COPY(&dst_addr->sin6_addr, &pktinfo6->ipi6_addr);
             dst_addr->sin6_family = AF_INET6;
@@ -370,35 +369,37 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
             }
         }
     }
-#else //IPV6_PKTINFO && IP_PKTINFO
-    ret=recvfrom(sock, buf, len, flags, src_addr, addrlen);
-#endif //IPV6_PKTINFO && IP_PKTINFO
+#else  // IPV6_PKTINFO && IP_PKTINFO
+    ret = recvfrom(sock, buf, len, flags, src_addr, addrlen);
+#endif // IPV6_PKTINFO && IP_PKTINFO
     if (ret == PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
-            ret=PCP_ERR_WOULDBLOCK;
+            ret = PCP_ERR_WOULDBLOCK;
         } else {
-            ret=PCP_ERR_RECV_FAILED;
+            ret = PCP_ERR_RECV_FAILED;
         }
     }
-#endif  //PCP_SOCKET_IS_VOIDPTR
+#endif // PCP_SOCKET_IS_VOIDPTR
 
     return ret;
 }
 
 static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
-    size_t len, int flags UNUSED, const struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen)
-{
-    ssize_t ret=-1;
+                                      size_t len, int flags UNUSED,
+                                      const struct sockaddr_in6 *src_addr,
+                                      struct sockaddr *dest_addr,
+                                      socklen_t addrlen) {
+    ssize_t ret = -1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
 
 #ifdef IPV6_PKTINFO
-    if(src_addr) {
+    if (src_addr) {
         struct iovec iov;
         struct in6_pktinfo ipi6;
         uint8_t c[CMSG_SPACE(sizeof(ipi6))];
         struct msghdr msg;
-        struct cmsghdr* cmsg;
+        struct cmsghdr *cmsg;
 
         iov.iov_base = (void *)buf;
         iov.iov_len = len;
@@ -419,24 +420,23 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         ret = sendmsg(sock, &msg, flags);
     } else {
 #endif /* IPV6_PKTINFO */
-        ret=sendto(sock, buf, len, 0, dest_addr, addrlen);
+        ret = sendto(sock, buf, len, 0, dest_addr, addrlen);
 #ifdef IPV6_PKTINFO
     }
 #endif /* IPV6_PKTINFO */
 
     if ((ret == PCP_SOCKET_ERROR) || (ret != (ssize_t)len)) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
-            ret=PCP_ERR_WOULDBLOCK;
+            ret = PCP_ERR_WOULDBLOCK;
         } else {
-            ret=PCP_ERR_SEND_FAILED;
+            ret = PCP_ERR_SEND_FAILED;
         }
     }
 #endif
     return ret;
 }
 
-static int pcp_socket_close_impl(PCP_SOCKET sock)
-{
+static int pcp_socket_close_impl(PCP_SOCKET sock) {
 #ifndef PCP_SOCKET_IS_VOIDPTR
     return CLOSE(sock);
 #else

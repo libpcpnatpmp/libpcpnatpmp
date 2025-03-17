@@ -30,11 +30,11 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
-#include <unistd.h>
-#include <sys/time.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
 #endif
 
 #include "pcp_socket.h"
@@ -45,17 +45,16 @@ char *sock_ntop(const SA *, socklen_t);
 char *sock_ntop_host(const SA *, socklen_t);
 char *Sock_ntop(const SA *, socklen_t);
 char *Sock_ntop_host(const SA *, socklen_t);
-int	 Sockfd_to_family(int);
+int Sockfd_to_family(int);
 
-int sock_pton(const char* cp, struct sockaddr *sa);
-int 
-sock_pton_with_prefix(const char* cp, struct sockaddr *sa, int *int_prefix);
-struct sockaddr *Sock_pton(const char* cp);
+int sock_pton(const char *cp, struct sockaddr *sa);
+int sock_pton_with_prefix(const char *cp, struct sockaddr *sa, int *int_prefix);
+struct sockaddr *Sock_pton(const char *cp);
 
-void	 err_dump(const char *, ...);
-void	 err_msg(const char *, ...);
-void	 err_quit(const char *, ...);
-void	 err_ret(const char *, ...);
-void	 err_sys(const char *, ...);
+void err_dump(const char *, ...);
+void err_msg(const char *, ...);
+void err_quit(const char *, ...);
+void err_ret(const char *, ...);
+void err_sys(const char *, ...);
 
-#endif	/* __unp_h */
+#endif /* __unp_h */

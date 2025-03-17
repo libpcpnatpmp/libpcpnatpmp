@@ -21,16 +21,16 @@
 #ifdef WIN32
 #include "pcp_win_defines.h"
 #else
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #endif
 
 #include "pcp.h"
-#include "unp.h"
-#include "test_macro.h"
-#include "pcp_socket.h"
 #include "pcp_client_db.h"
+#include "pcp_socket.h"
+#include "test_macro.h"
+#include "unp.h"
 
 int main(int argc, char *argv[]) {
     struct sockaddr_storage destination;
@@ -40,22 +40,21 @@ int main(int argc, char *argv[]) {
     pcp_server_t *s;
     uint8_t protocol = 6;
     uint32_t lifetime = 10;
-    pcp_flow_t* flow = NULL;
-    pcp_flow_info_t * flow_info = NULL;
+    pcp_flow_t *flow = NULL;
+    pcp_flow_info_t *flow_info = NULL;
     size_t flow_count;
     pcp_ctx_t *ctx;
 
     PD_SOCKET_STARTUP();
-    version = (argc == 2 ) ? (uint8_t)atoi(argv[1]) : PCP_MAX_SUPPORTED_VERSION;
+    version = (argc == 2) ? (uint8_t)atoi(argv[1]) : PCP_MAX_SUPPORTED_VERSION;
 
     pcp_log_level = 0;
 
-    if (argc != 2) {   //LCOV_EXCL_START
+    if (argc != 2) { // LCOV_EXCL_START
         printf("Invalid number of arguments.\n");
         printf("This test takes only one argument, PCP version number.\n");
         return -1;
-    }  //LCOV_EXCL_STOP
-
+    } // LCOV_EXCL_STOP
 
     printf("\n");
     fprintf(stdout, "###########################################\n");
@@ -68,22 +67,20 @@ int main(int argc, char *argv[]) {
     ctx = pcp_init(0, NULL);
     pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), version);
 
-    sock_pton("127.0.0.1:1234", (struct sockaddr*) &destination);
-    sock_pton("127.0.0.1:1235", (struct sockaddr*) &source);
-    sock_pton("10.20.30.40", (struct sockaddr*) &ext);
+    sock_pton("127.0.0.1:1234", (struct sockaddr *)&destination);
+    sock_pton("127.0.0.1:1235", (struct sockaddr *)&source);
+    sock_pton("10.20.30.40", (struct sockaddr *)&ext);
 
-    flow = pcp_new_flow(ctx,
-                        (struct sockaddr*)&source,
-                        (struct sockaddr*)&destination,
-                        (struct sockaddr*)&ext,
-                        protocol, lifetime, NULL);
+    flow = pcp_new_flow(ctx, (struct sockaddr *)&source,
+                        (struct sockaddr *)&destination,
+                        (struct sockaddr *)&ext, protocol, lifetime, NULL);
 
     TEST(pcp_wait(flow, 2000, 0) == pcp_state_succeeded);
-    flow_info=pcp_flow_get_info(flow, &flow_count);
+    flow_info = pcp_flow_get_info(flow, &flow_count);
     TEST(flow_info);
     printf("Flow result code %d \n", flow_info->pcp_result_code);
     s = get_pcp_server(ctx, flow->pcp_server_indx);
-    TEST((s) && (s->pcp_version == 1) );
+    TEST((s) && (s->pcp_version == 1));
 
     pcp_close_flow(flow);
     pcp_delete_flow(flow);
@@ -93,5 +90,4 @@ int main(int argc, char *argv[]) {
     PD_SOCKET_CLEANUP();
     pcp_terminate(ctx, 0);
     return 0;
-
 }
