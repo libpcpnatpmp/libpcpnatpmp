@@ -26,6 +26,7 @@
 #ifndef PCP_CLIENT_DB_H_
 #define PCP_CLIENT_DB_H_
 
+#include <netinet/in.h>
 #include <stdint.h>
 #include "pcp.h"
 #include "pcp_event_handler.h"
@@ -94,6 +95,7 @@ typedef struct pcp_recv_msg {
     //control data
     uint32_t pcp_server_indx;
     struct sockaddr_storage rcvd_from_addr;
+    struct sockaddr_in6 rcvd_to_addr;
     //msg buffer
     uint32_t pcp_msg_len;
     char pcp_msg_buffer[PCP_MAX_LEN];

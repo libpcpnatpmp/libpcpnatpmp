@@ -327,6 +327,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
     ssize_t ret;
     size_t to_send_count;
     pcp_ctx_t *ctx=s->ctx;
+    struct sockaddr_in6 src_saddr;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
 
@@ -340,6 +341,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
         }
     }
 
+    pcp_fill_sockaddr((struct sockaddr *)&src_saddr, &flow->kd.src_ip, 0, 1, s->pcp_scope_id);
     to_send_count=flow->pcp_msg_len;
 
     while (to_send_count != 0) {
@@ -347,7 +349,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
 
         ret=pcp_socket_sendto(ctx, flow->pcp_msg_buffer + ret,
                 flow->pcp_msg_len - ret, MSG_DONTWAIT,
-                (struct sockaddr*)&s->pcp_server_saddr,
+                &src_saddr, (struct sockaddr*)&s->pcp_server_saddr,
                 SA_LEN((struct sockaddr*)&s->pcp_server_saddr));
         if (ret <= 0) {
             PCP_LOG(PCP_LOGLVL_WARN, "Error occurred while sending "
@@ -376,7 +378,7 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg)
 
     if ((ret=pcp_socket_recvfrom(ctx, msg->pcp_msg_buffer,
             sizeof(msg->pcp_msg_buffer), MSG_DONTWAIT,
-            (struct sockaddr*)&msg->rcvd_from_addr, &src_len)) < 0) {
+            (struct sockaddr*)&msg->rcvd_from_addr, &src_len, &msg->rcvd_to_addr)) < 0) {
         return ret;
     }
 
@@ -671,7 +673,7 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
         f=pcp_get_flow(&msg->kd, s);
     }
 #else
-    f = pcp_get_flow(&msg->kd, s->index);
+    f = pcp_get_flow(&msg->kd, s);
 #endif
 
     if (!f) {
@@ -1292,15 +1294,19 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
         s=get_pcp_server_by_ip(ctx, &ip6);
 
         if (s) {
-          msg->pcp_server_indx=s->index;
-          memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
-          memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
-          if (msg->recv_version < 2) {
-            memcpy(&msg->kd.nonce, &s->nonce, sizeof(struct pcp_nonce));
-          }
+            PCP_LOG(PCP_LOGLVL_DEBUG,"Found server: %s", s->pcp_server_paddr);
+            msg->pcp_server_indx=s->index;
+            memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
+            pcp_fill_in6_addr(&msg->kd.src_ip, NULL, (struct sockaddr*)&msg->rcvd_to_addr);
+            if (IN6_IS_ADDR_UNSPECIFIED(&msg->kd.src_ip)) {
+                memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
+            }
+            if (msg->recv_version < 2) {
+                memcpy(&msg->kd.nonce, &s->nonce, sizeof(struct pcp_nonce));
+            }
 
-          // process pcpe_io_event for server
-          hserver_iter(s, &param);
+            // process pcpe_io_event for server
+            hserver_iter(s, &param);
         }
     }
 

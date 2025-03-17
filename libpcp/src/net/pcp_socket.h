@@ -78,10 +78,10 @@ PCP_SOCKET pcp_socket_create(struct pcp_ctx_s *ctx, int domain, int type,
         int protocol);
 
 ssize_t pcp_socket_recvfrom(struct pcp_ctx_s *ctx, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen);
+        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
 
 ssize_t pcp_socket_sendto(struct pcp_ctx_s *ctx, const void *buf, size_t len,
-        int flags, struct sockaddr *dest_addr, socklen_t addrlen);
+        int flags, struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen);
 
 int pcp_socket_close(struct pcp_ctx_s *ctx);
 
