@@ -84,11 +84,11 @@ static void test_pcp_server_functions(pcp_ctx_t *ctx)
     TEST(pcp_new_server(ctx, &ip6, PCP_SERVER_PORT, 0) == 5);
     TEST(pcp_new_server(ctx, &ip6, PCP_SERVER_PORT, 0) == 6);
 
-    sret=get_pcp_server_by_ip(ctx, &ip6);
+    sret=get_pcp_server_by_ip(ctx, &ip6, 0);
     TEST(sret!=NULL);
     TEST(si2==(int)sret->index);
 #endif
-    sret=get_pcp_server_by_ip(ctx, &ip4);
+    sret=get_pcp_server_by_ip(ctx, &ip4, 0);
     TEST(sret!=NULL);
     TEST(si1==(int)sret->index);
 

@@ -327,6 +327,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
     ssize_t ret;
     size_t to_send_count;
     pcp_ctx_t *ctx=s->ctx;
+    struct sockaddr_in6 src_saddr;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
 
@@ -340,6 +341,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
         }
     }
 
+    pcp_fill_sockaddr((struct sockaddr *)&src_saddr, &flow->kd.src_ip, 0, 1, s->pcp_scope_id);
     to_send_count=flow->pcp_msg_len;
 
     while (to_send_count != 0) {
@@ -347,7 +349,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s)
 
         ret=pcp_socket_sendto(ctx, flow->pcp_msg_buffer + ret,
                 flow->pcp_msg_len - ret, MSG_DONTWAIT,
-                (struct sockaddr*)&s->pcp_server_saddr,
+                &src_saddr, (struct sockaddr*)&s->pcp_server_saddr,
                 SA_LEN((struct sockaddr*)&s->pcp_server_saddr));
         if (ret <= 0) {
             PCP_LOG(PCP_LOGLVL_WARN, "Error occurred while sending "
@@ -376,7 +378,7 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg)
 
     if ((ret=pcp_socket_recvfrom(ctx, msg->pcp_msg_buffer,
             sizeof(msg->pcp_msg_buffer), MSG_DONTWAIT,
-            (struct sockaddr*)&msg->rcvd_from_addr, &src_len)) < 0) {
+            (struct sockaddr*)&msg->rcvd_from_addr, &src_len, &msg->rcvd_to_addr)) < 0) {
         return ret;
     }
 
@@ -671,7 +673,7 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
         f=pcp_get_flow(&msg->kd, s);
     }
 #else
-    f = pcp_get_flow(&msg->kd, s->index);
+    f = pcp_get_flow(&msg->kd, s);
 #endif
 
     if (!f) {
@@ -1273,6 +1275,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
 
     if (read_msg(ctx, msg) == PCP_ERR_SUCCESS) {
         struct in6_addr ip6;
+        uint32_t scope_id;
         pcp_server_t *s;
         struct hserver_iter_data param={NULL, pcpe_io_event};
 
@@ -1288,19 +1291,25 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
             goto process_timeouts;
         }
 
-        pcp_fill_in6_addr(&ip6, NULL, (struct sockaddr*)&msg->rcvd_from_addr);
-        s=get_pcp_server_by_ip(ctx, &ip6);
+        pcp_fill_in6_addr(&ip6, NULL, &scope_id, (struct sockaddr*)&msg->rcvd_from_addr);
+        PCP_LOG(PCP_LOGLVL_DEBUG,"SCOPE_ID: %u", scope_id);
+        s=get_pcp_server_by_ip(ctx, &ip6, scope_id);
 
         if (s) {
-          msg->pcp_server_indx=s->index;
-          memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
-          memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
-          if (msg->recv_version < 2) {
-            memcpy(&msg->kd.nonce, &s->nonce, sizeof(struct pcp_nonce));
-          }
+            PCP_LOG(PCP_LOGLVL_DEBUG,"Found server: %s", s->pcp_server_paddr);
+            msg->pcp_server_indx=s->index;
+            memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
+            pcp_fill_in6_addr(&msg->kd.src_ip, NULL, &msg->kd.scope_id, (struct sockaddr*)&msg->rcvd_to_addr);
+            if (IN6_IS_ADDR_UNSPECIFIED(&msg->kd.src_ip)) {
+                memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
+                msg->kd.scope_id = scope_id;
+            }
+            if (msg->recv_version < 2) {
+                memcpy(&msg->kd.nonce, &s->nonce, sizeof(struct pcp_nonce));
+            }
 
-          // process pcpe_io_event for server
-          hserver_iter(s, &param);
+            // process pcpe_io_event for server
+            hserver_iter(s, &param);
         }
     }
 
@@ -1354,7 +1363,7 @@ static void flow_change_notify(pcp_flow_t *flow, pcp_fstate_e state)
 
     if (ctx->flow_change_cb_fun) {
         pcp_fill_sockaddr((struct sockaddr*)&src_addr, &flow->kd.src_ip,
-                flow->kd.map_peer.src_port, 0, 0/* scope_id */);
+                flow->kd.map_peer.src_port, 0, flow->kd.scope_id);
         if (state == pcp_state_succeeded) {
             pcp_fill_sockaddr((struct sockaddr*)&ext_addr,
                     &flow->map_peer.ext_ip, flow->map_peer.ext_port, 0,

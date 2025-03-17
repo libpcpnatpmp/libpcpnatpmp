@@ -333,7 +333,7 @@ int pcp_new_server(pcp_ctx_t *ctx, struct in6_addr *ip, uint16_t port, uint32_t 
 #endif
     IPV6_ADDR_COPY((struct in6_addr*)ret->pcp_ip, ip);
     ret->pcp_port=port;
-    ret->pcp_scope_id=scope_id;
+    ret->pcp_scope_id=IN6_IS_ADDR_LINKLOCAL(ip) ? scope_id : 0;
     ret->ctx=ctx;
     ret->server_state=pss_allocated;
     ret->pcp_version=PCP_MAX_SUPPORTED_VERSION;
@@ -394,6 +394,7 @@ pcp_errno pcp_db_foreach_server(pcp_ctx_t *ctx, pcp_db_server_iterate f,
 
 typedef struct find_data {
     struct in6_addr *ip;
+    uint32_t scope_id;
     pcp_server_t *found_server;
 } find_data_t;
 
@@ -401,7 +402,7 @@ static int find_ip(pcp_server_t *s, void *data)
 {
     find_data_t *fd=(find_data_t *)data;
 
-    if (IN6_ARE_ADDR_EQUAL(fd->ip, (struct in6_addr *) s->pcp_ip)) {
+    if (IN6_ARE_ADDR_EQUAL(fd->ip, (struct in6_addr *) s->pcp_ip) && (fd->scope_id == s->pcp_scope_id)) {
 
         fd->found_server=s;
         return 1;
@@ -409,7 +410,7 @@ static int find_ip(pcp_server_t *s, void *data)
     return 0;
 }
 
-pcp_server_t *get_pcp_server_by_ip(pcp_ctx_t *ctx, struct in6_addr *ip)
+pcp_server_t *get_pcp_server_by_ip(pcp_ctx_t *ctx, struct in6_addr *ip, uint32_t scope_id)
 {
     find_data_t fdata;
 
@@ -419,6 +420,7 @@ pcp_server_t *get_pcp_server_by_ip(pcp_ctx_t *ctx, struct in6_addr *ip)
 
     fdata.found_server=NULL;
     fdata.ip=ip;
+    fdata.scope_id=IN6_IS_ADDR_LINKLOCAL(ip) ? scope_id : 0;
     pcp_db_foreach_server(ctx, find_ip, &fdata);
 
     PCP_LOG_END(PCP_LOGLVL_DEBUG);

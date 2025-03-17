@@ -26,6 +26,7 @@
 #ifndef PCP_CLIENT_DB_H_
 #define PCP_CLIENT_DB_H_
 
+#include <netinet/in.h>
 #include <stdint.h>
 #include "pcp.h"
 #include "pcp_event_handler.h"
@@ -65,6 +66,7 @@ struct flow_key_data {
     uint8_t operation;
     struct in6_addr src_ip;
     struct in6_addr pcp_server_ip;
+    uint32_t scope_id;
     struct pcp_nonce nonce;
     union {
         struct mp_keydata {
@@ -94,6 +96,7 @@ typedef struct pcp_recv_msg {
     //control data
     uint32_t pcp_server_indx;
     struct sockaddr_storage rcvd_from_addr;
+    struct sockaddr_in6 rcvd_to_addr;
     //msg buffer
     uint32_t pcp_msg_len;
     char pcp_msg_buffer[PCP_MAX_LEN];
@@ -249,7 +252,7 @@ pcp_errno pcp_db_foreach_server(pcp_ctx_t *ctx, pcp_db_server_iterate f,
 
 pcp_server_t *get_pcp_server(pcp_ctx_t *ctx, int pcp_server_index);
 
-pcp_server_t *get_pcp_server_by_ip(pcp_ctx_t *ctx, struct in6_addr *ip);
+pcp_server_t *get_pcp_server_by_ip(pcp_ctx_t *ctx, struct in6_addr *ip, uint32_t scope_id);
 
 void pcp_db_free_pcp_servers(pcp_ctx_t *ctx);
 

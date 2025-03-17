@@ -23,6 +23,8 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _GNU_SOURCE
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #else
@@ -50,9 +52,9 @@
 
 static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol);
 static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen);
+        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
 static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
-        size_t len, int flags, struct sockaddr *dest_addr, socklen_t addrlen);
+        size_t len, int flags, const struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen);
 static int pcp_socket_close_impl(PCP_SOCKET sock);
 
 pcp_socket_vt_t default_socket_vt={
@@ -106,7 +108,7 @@ int pcp_win_sock_cleanup()
 #endif
 
 void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
-        struct sockaddr *src)
+        uint32_t *dst_scope_id, struct sockaddr *src)
 {
     if (src->sa_family == AF_INET) {
         struct sockaddr_in *src_ip4=(struct sockaddr_in *)src;
@@ -126,6 +128,9 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
         if (dst_port) {
             *dst_port=src_ip4->sin_port;
         }
+        if (dst_scope_id) {
+            *dst_scope_id = 0;
+        }
     } else if (src->sa_family == AF_INET6) {
         struct sockaddr_in6 *src_ip6=(struct sockaddr_in6 *)src;
 
@@ -134,6 +139,9 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
         }
         if (dst_port) {
             *dst_port=src_ip6->sin6_port;
+        }
+        if (dst_scope_id) {
+            *dst_scope_id = src_ip6->sin6_scope_id;
         }
     }
 }
@@ -196,21 +204,21 @@ PCP_SOCKET pcp_socket_create(struct pcp_ctx_s *ctx, int domain, int type,
 }
 
 ssize_t pcp_socket_recvfrom(struct pcp_ctx_s *ctx, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen)
+        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr)
 {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_recvfrom);
 
     return ctx->virt_socket_tb->sock_recvfrom(ctx->socket, buf, len, flags,
-            src_addr, addrlen);
+            src_addr, addrlen, dst_addr);
 }
 
 ssize_t pcp_socket_sendto(struct pcp_ctx_s *ctx, const void *buf, size_t len,
-        int flags, struct sockaddr *dest_addr, socklen_t addrlen)
+        int flags, struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen)
 {
     assert(ctx && ctx->virt_socket_tb && ctx->virt_socket_tb->sock_sendto);
 
     return ctx->virt_socket_tb->sock_sendto(ctx->socket, buf, len, flags,
-            dest_addr, addrlen);
+            src_addr, dest_addr, addrlen);
 }
 
 int pcp_socket_close(struct pcp_ctx_s *ctx)
@@ -258,7 +266,7 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#else
+#else //WIN32
     flg=fcntl(s, F_GETFL, 0);
     if (fcntl(s, F_SETFL, flg | O_NONBLOCK)) {
         PCP_LOG(PCP_LOGLVL_ERR, "%s",
@@ -266,7 +274,25 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#endif
+#if defined(IP_PKTINFO) && defined(IPV6_RECVPKTINFO)
+    {
+        // Enable usage of IP_PKTINFO
+        int optval = 1;
+        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval)) < 0) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                    "Unable to set IP_PKTINFO option for socket.");
+            CLOSE(s);
+            return PCP_INVALID_SOCKET;
+        }
+        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval, sizeof(optval)) < 0) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                "Unable to set IPV6_RECVPKTINFO option for socket.");
+            CLOSE(s);
+            return PCP_INVALID_SOCKET;
+        }
+    }
+#endif //IP_PKTINFO && IPV6_RECVPKTINFO
+#endif //!WIN32
 #ifdef PCP_USE_IPV6_SOCKET
     flg=0;
     if (PCP_SOCKET_ERROR
@@ -299,12 +325,60 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol)
 }
 
 static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
-        size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen)
+        size_t len, int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr)
 {
     ssize_t ret=-1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
+#if defined(IPV6_PKTINFO) && defined(IP_PKTINFO)
+    // Buffer pre kontrolné správy
+    char control_buf[1024];
+
+    struct msghdr msg;
+    struct iovec iov;
+    struct cmsghdr *cmsg;
+    struct in_pktinfo *pktinfo;
+    struct in6_pktinfo *pktinfo6;
+
+    iov.iov_base = buf;
+    iov.iov_len = len;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_name = src_addr;
+    msg.msg_namelen = addrlen ? *addrlen : 0;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control_buf;
+    msg.msg_controllen = sizeof(control_buf);
+
+    // Prijatie správy s IP_PKTINFO
+    ret = recvmsg(sock, &msg, 0);
+
+    // Processing control message
+    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+        if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
+            pktinfo = (struct in_pktinfo *)CMSG_DATA(cmsg);
+            S6_ADDR32(&dst_addr->sin6_addr)[0] = 0;
+            S6_ADDR32(&dst_addr->sin6_addr)[1] = 0;
+            S6_ADDR32(&dst_addr->sin6_addr)[2] = htonl(0xFFFF);
+            S6_ADDR32(&dst_addr->sin6_addr)[3] = pktinfo->ipi_addr.s_addr;
+            dst_addr->sin6_scope_id = 0;
+            dst_addr->sin6_family = AF_INET6;
+        }
+        if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+            pktinfo6 = (struct in6_pktinfo *)CMSG_DATA(cmsg);
+            IPV6_ADDR_COPY(&dst_addr->sin6_addr, &pktinfo6->ipi6_addr);
+            dst_addr->sin6_family = AF_INET6;
+            if (IN6_IS_ADDR_LINKLOCAL(&pktinfo6->ipi6_addr)) {
+                dst_addr->sin6_scope_id = pktinfo6->ipi6_ifindex;
+            } else {
+                dst_addr->sin6_scope_id = 0;
+            }
+        }
+    }
+#else //IPV6_PKTINFO && IP_PKTINFO
     ret=recvfrom(sock, buf, len, flags, src_addr, addrlen);
+#endif //IPV6_PKTINFO && IP_PKTINFO
     if (ret == PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
             ret=PCP_ERR_WOULDBLOCK;
@@ -318,12 +392,44 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf,
 }
 
 static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
-    size_t len, int flags UNUSED, struct sockaddr *dest_addr, socklen_t addrlen)
+    size_t len, int flags UNUSED, const struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen)
 {
     ssize_t ret=-1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
-    ret=sendto(sock, buf, len, 0, dest_addr, addrlen);
+
+#ifdef IPV6_PKTINFO
+    if(src_addr) {
+        struct iovec iov;
+        struct in6_pktinfo ipi6;
+        uint8_t c[CMSG_SPACE(sizeof(ipi6))];
+        struct msghdr msg;
+        struct cmsghdr* cmsg;
+
+        iov.iov_base = (void *)buf;
+        iov.iov_len = len;
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        ipi6.ipi6_addr = src_addr->sin6_addr;
+        ipi6.ipi6_ifindex = src_addr->sin6_scope_id;
+        msg.msg_control = c;
+        msg.msg_controllen = sizeof(c);
+        cmsg = CMSG_FIRSTHDR(&msg);
+        cmsg->cmsg_level = IPPROTO_IPV6;
+        cmsg->cmsg_type = IPV6_PKTINFO;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(ipi6));
+        memcpy(CMSG_DATA(cmsg), &ipi6, sizeof(ipi6));
+        msg.msg_name = (void *)dest_addr;
+        msg.msg_namelen = addrlen;
+        ret = sendmsg(sock, &msg, flags);
+    } else {
+#endif /* IPV6_PKTINFO */
+        ret=sendto(sock, buf, len, 0, dest_addr, addrlen);
+#ifdef IPV6_PKTINFO
+    }
+#endif /* IPV6_PKTINFO */
+
     if ((ret == PCP_SOCKET_ERROR) || (ret != (ssize_t)len)) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
             ret=PCP_ERR_WOULDBLOCK;

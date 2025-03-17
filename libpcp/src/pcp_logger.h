@@ -95,8 +95,8 @@ do { \
                 sizeof(dst_buf)); \
         inet_ntop(AF_INET6, &f->kd.pcp_server_ip, pcp_buf, sizeof(pcp_buf)); \
         PCP_LOG(PCP_LOGLVL_INFO, \
-                "%s(PCP server: %s; Int. addr: [%s]:%d; Dest. addr: [%s]:%d; Key bucket: %d)", \
-                msg, pcp_buf, src_buf, ntohs(f->kd.map_peer.src_port), dst_buf, ntohs(f->kd.map_peer.dst_port), f->key_bucket); \
+                "%s(PCP server: %s; Int. addr: [%s]:%d; ScopeId: %u; Dest. addr: [%s]:%d; Key bucket: %d)", \
+                msg, pcp_buf, src_buf, ntohs(f->kd.map_peer.src_port), f->kd.scope_id, dst_buf, ntohs(f->kd.map_peer.dst_port), f->key_bucket); \
     } \
 } while(0)
 #else
