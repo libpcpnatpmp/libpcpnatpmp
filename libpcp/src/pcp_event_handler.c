@@ -1300,7 +1300,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout)
             msg->pcp_server_indx=s->index;
             memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
             pcp_fill_in6_addr(&msg->kd.src_ip, NULL, &msg->kd.scope_id, (struct sockaddr*)&msg->rcvd_to_addr);
-            if (IN6_IS_ADDR_UNSPECIFIED(&msg->kd.src_ip)) {
+            if (IPV6_IS_ADDR_ANY(&msg->kd.src_ip)) {
                 memcpy(&msg->kd.src_ip, s->src_ip, sizeof(struct in6_addr));
                 msg->kd.scope_id = scope_id;
             }

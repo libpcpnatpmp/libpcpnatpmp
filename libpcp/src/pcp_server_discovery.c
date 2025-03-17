@@ -147,7 +147,7 @@ void psd_add_gws(pcp_ctx_t *ctx)
         if ((IN6_IS_ADDR_V4MAPPED(&gw->sin6_addr)) && (S6_ADDR32(&gw->sin6_addr)[3] == INADDR_ANY))
             continue;
 
-        if (IN6_IS_ADDR_UNSPECIFIED(&gw->sin6_addr))
+        if (IPV6_IS_ADDR_ANY(&gw->sin6_addr))
             continue;
 
         if (get_pcp_server_by_ip(ctx, &gw->sin6_addr, gw->sin6_scope_id))

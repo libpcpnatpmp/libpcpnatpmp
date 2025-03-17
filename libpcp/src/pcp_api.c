@@ -355,7 +355,7 @@ static int chain_and_assign_src_ip(pcp_server_t *s, void *data)
 
     pcp_flow_t *f=NULL;
 
-    if (IN6_IS_ADDR_UNSPECIFIED(&kd.src_ip)) {
+    if (IPV6_IS_ADDR_ANY(&kd.src_ip)) {
         memcpy(&kd.src_ip, s->src_ip, sizeof(kd.src_ip));
         kd.scope_id = s->pcp_scope_id;
     }
@@ -430,7 +430,7 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
                 }
                 break;
             case AF_INET6:
-                if (IN6_IS_ADDR_UNSPECIFIED(
+                if (IPV6_IS_ADDR_ANY(
                         &((struct sockaddr_in6 *)(dst_addr))->sin6_addr)) {
                     dst_addr=NULL;
                 }
@@ -448,7 +448,7 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
             if (S6_ADDR32(&kd.src_ip)[3] == INADDR_ANY) {
                 findsaddr((struct sockaddr_in*)dst_addr, &kd.src_ip);
             }
-        } else if (IN6_IS_ADDR_UNSPECIFIED(&kd.src_ip)) {
+        } else if (IPV6_IS_ADDR_ANY(&kd.src_ip)) {
             findsaddr6((struct sockaddr_in6*)dst_addr, &kd.src_ip, &kd.scope_id);
         } else if (dst_addr->sa_family != src_addr->sa_family) {
             PCP_LOG(PCP_LOGLVL_PERR, "%s",
