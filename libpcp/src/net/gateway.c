@@ -33,50 +33,50 @@
 #include <errno.h>
 #include <sys/types.h>
 #ifndef WIN32
-#include <sys/socket.h>         // place it before <net/if.h> struct sockaddr
-#endif //WIN32
+#include <sys/socket.h> // place it before <net/if.h> struct sockaddr
+#endif                  // WIN32
 #ifdef __linux__
 #define USE_NETLINK
-#include <linux/types.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <linux/types.h>
 #endif
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef WIN32
-#include <sys/ioctl.h>          // ioctl()
-#include <net/if.h>             //struct ifreq
-#endif //WIN32
+#include <net/if.h>    //struct ifreq
+#include <sys/ioctl.h> // ioctl()
+#endif                 // WIN32
 #ifdef WIN32
 #undef USE_NETLINK
 #undef USE_SOCKET_ROUTE
 #define USE_WIN32_CODE
 
+#include "pcp_win_defines.h"
+#include <Iphlpapi.h>
 #include <winsock2.h>
 #include <ws2ipdef.h>
-#include <Iphlpapi.h>
 #include <ws2tcpip.h>
-#include "pcp_win_defines.h"
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
+#include <net/if_dl.h> //struct sockaddr_dl
 #include <sys/sysctl.h>
-#include <net/if_dl.h>          //struct sockaddr_dl
 #define USE_SOCKET_ROUTE
 #endif
 
 #ifndef WIN32
-#include <arpa/inet.h>          // inet_addr()
-#include <net/route.h>          // struct rt_msghdr
+#include <arpa/inet.h> // inet_addr()
+#include <net/route.h> // struct rt_msghdr
 #ifdef USE_SOCKET_ROUTE
-#include <ifaddrs.h>            //getifaddrs() freeifaddrs()
+#include <ifaddrs.h> //getifaddrs() freeifaddrs()
 #endif
 #include <net/if.h>
 #include <net/route.h>
-#include <netinet/in.h>         //IPPROTO_GRE sturct sockaddr_in INADDR_ANY
+#include <netinet/in.h> //IPPROTO_GRE sturct sockaddr_in INADDR_ANY
 #endif
 
 #if defined(BSD) || defined(__FreeBSD_kernel__)
@@ -91,33 +91,33 @@
 
 #include "gateway.h"
 #include "pcp_logger.h"
-#include "unp.h"
 #include "pcp_utils.h"
+#include "unp.h"
 
 #ifndef WIN32
 #define SUCCESS (0)
-#define FAILED  (-1)
+#define FAILED (-1)
 #define USE_WIN32_CODE
 #endif
 
-#define TO_IPV6MAPPED(x)        S6_ADDR32(x)[3] = S6_ADDR32(x)[0];\
-                                S6_ADDR32(x)[0] = 0;\
-                                S6_ADDR32(x)[1] = 0;\
-                                S6_ADDR32(x)[2] = htonl(0xFFFF);
+#define TO_IPV6MAPPED(x)                                                       \
+    S6_ADDR32(x)[3] = S6_ADDR32(x)[0];                                         \
+    S6_ADDR32(x)[0] = 0;                                                       \
+    S6_ADDR32(x)[1] = 0;                                                       \
+    S6_ADDR32(x)[2] = htonl(0xFFFF);
 
 #ifdef USE_NETLINK
 
 #define BUFSIZE 8192
 
 static ssize_t readNlSock(int sockFd, char *bufPtr, unsigned seqNum,
-        unsigned pId)
-{
+                          unsigned pId) {
     struct nlmsghdr *nlHdr;
-    ssize_t readLen=0, msgLen=0;
+    ssize_t readLen = 0, msgLen = 0;
 
     do {
         /* Receive response from the kernel */
-        readLen=recv(sockFd, bufPtr, BUFSIZE - msgLen, 0);
+        readLen = recv(sockFd, bufPtr, BUFSIZE - msgLen, 0);
         if (readLen == -1) {
             char errmsg[128];
             pcp_strerror(errno, errmsg, sizeof(errmsg));
@@ -125,11 +125,11 @@ static ssize_t readNlSock(int sockFd, char *bufPtr, unsigned seqNum,
             return -1;
         }
 
-        nlHdr=(struct nlmsghdr *)bufPtr;
+        nlHdr = (struct nlmsghdr *)bufPtr;
 
         /* Check if the header is valid */
-        if ((NLMSG_OK(nlHdr, (unsigned)readLen) == 0)
-                || (nlHdr->nlmsg_type == NLMSG_ERROR)) {
+        if ((NLMSG_OK(nlHdr, (unsigned)readLen) == 0) ||
+            (nlHdr->nlmsg_type == NLMSG_ERROR)) {
             PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error in received packet");
             return -1;
         }
@@ -139,8 +139,8 @@ static ssize_t readNlSock(int sockFd, char *bufPtr, unsigned seqNum,
             break;
         } else {
             /* Else move the pointer to buffer appropriately */
-            bufPtr+=readLen;
-            msgLen+=readLen;
+            bufPtr += readLen;
+            msgLen += readLen;
         }
 
         /* Check if its a multi part message */
@@ -152,12 +152,11 @@ static ssize_t readNlSock(int sockFd, char *bufPtr, unsigned seqNum,
     return msgLen;
 }
 
-int getgateways(struct sockaddr_in6 **gws)
-{
+int getgateways(struct sockaddr_in6 **gws) {
     struct nlmsghdr *nlMsg;
     char msgBuf[BUFSIZE];
 
-    int sock, msgSeq=0;
+    int sock, msgSeq = 0;
     ssize_t len;
     int ret;
 
@@ -166,7 +165,7 @@ int getgateways(struct sockaddr_in6 **gws)
     }
 
     /* Create Socket */
-    sock=socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
+    sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
     if (sock < 0) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Netlink Socket Creation Failed...");
         return PCP_ERR_UNKNOWN;
@@ -176,55 +175,58 @@ int getgateways(struct sockaddr_in6 **gws)
     memset(msgBuf, 0, BUFSIZE);
 
     /* point the header and the msg structure pointers into the buffer */
-    nlMsg=(struct nlmsghdr *)msgBuf;
+    nlMsg = (struct nlmsghdr *)msgBuf;
 
     /* Fill in the nlmsg header*/
-    nlMsg->nlmsg_len=NLMSG_LENGTH(sizeof(struct rtmsg)); // Length of message.
-    nlMsg->nlmsg_type=RTM_GETROUTE; // Get the routes from kernel routing table.
+    nlMsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)); // Length of message.
+    nlMsg->nlmsg_type =
+        RTM_GETROUTE; // Get the routes from kernel routing table.
 
-    nlMsg->nlmsg_flags=NLM_F_DUMP | NLM_F_REQUEST; // The message is a request for dump.
-    nlMsg->nlmsg_seq=msgSeq++; // Sequence of the message packet.
-    nlMsg->nlmsg_pid=getpid(); // PID of process sending the request.
+    nlMsg->nlmsg_flags =
+        NLM_F_DUMP | NLM_F_REQUEST; // The message is a request for dump.
+    nlMsg->nlmsg_seq = msgSeq++;    // Sequence of the message packet.
+    nlMsg->nlmsg_pid = getpid();    // PID of process sending the request.
 
     /* Send the request */
-    len=send(sock, nlMsg, nlMsg->nlmsg_len, 0);
+    len = send(sock, nlMsg, nlMsg->nlmsg_len, 0);
     if (len == -1) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Write To Netlink Socket Failed...");
-        ret=PCP_ERR_SEND_FAILED;
+        ret = PCP_ERR_SEND_FAILED;
         goto end;
     }
 
     /* Read the response */
-    len=readNlSock(sock, msgBuf, msgSeq, getpid());
+    len = readNlSock(sock, msgBuf, msgSeq, getpid());
     if (len < 0) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Read From Netlink Socket Failed...");
-        ret=PCP_ERR_RECV_FAILED;
+        ret = PCP_ERR_RECV_FAILED;
         goto end;
     }
     /* Parse and print the response */
-    ret=0;
+    ret = 0;
 
-    for (; NLMSG_OK(nlMsg,(unsigned)len); nlMsg=NLMSG_NEXT(nlMsg,len)) {
+    for (; NLMSG_OK(nlMsg, (unsigned)len); nlMsg = NLMSG_NEXT(nlMsg, len)) {
         struct rtmsg *rtMsg;
         struct rtattr *rtAttr;
         int rtLen;
         unsigned int scope_id = 0;
         struct in6_addr addr;
         int found = 0;
-        rtMsg=(struct rtmsg *)NLMSG_DATA(nlMsg);
+        rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
 
         /* If the route is not for AF_INET(6) or does not belong to main
            routing table then return. */
-        if (((rtMsg->rtm_family != AF_INET) && (rtMsg->rtm_family != AF_INET6))
-                || (rtMsg->rtm_table != RT_TABLE_MAIN)) {
+        if (((rtMsg->rtm_family != AF_INET) &&
+             (rtMsg->rtm_family != AF_INET6)) ||
+            (rtMsg->rtm_table != RT_TABLE_MAIN)) {
             continue;
         }
 
         /* get the rtattr field */
-        rtAttr=(struct rtattr *)RTM_RTA(rtMsg);
-        rtLen=RTM_PAYLOAD(nlMsg);
-        for (; RTA_OK(rtAttr,rtLen); rtAttr=RTA_NEXT(rtAttr,rtLen)) {
-            size_t rtaLen=RTA_PAYLOAD(rtAttr);
+        rtAttr = (struct rtattr *)RTM_RTA(rtMsg);
+        rtLen = RTM_PAYLOAD(nlMsg);
+        for (; RTA_OK(rtAttr, rtLen); rtAttr = RTA_NEXT(rtAttr, rtLen)) {
+            size_t rtaLen = RTA_PAYLOAD(rtAttr);
             if (rtaLen > sizeof(struct in6_addr)) {
                 continue;
             }
@@ -236,27 +238,26 @@ int getgateways(struct sockaddr_in6 **gws)
                 if (rtMsg->rtm_family == AF_INET) {
                     TO_IPV6MAPPED(&addr);
                 }
-                found=1;
+                found = 1;
             }
         }
         if (found) {
             struct sockaddr_in6 *tmp_gws;
-            tmp_gws=(struct sockaddr_in6 *)realloc(*gws,
-                    sizeof(struct sockaddr_in6) * (ret + 1));
+            tmp_gws = (struct sockaddr_in6 *)realloc(
+                *gws, sizeof(struct sockaddr_in6) * (ret + 1));
             if (!tmp_gws) {
-                PCP_LOG(PCP_LOGLVL_ERR, "%s",
-                        "Error allocating memory");
+                PCP_LOG(PCP_LOGLVL_ERR, "%s", "Error allocating memory");
                 if (*gws) {
                     free(*gws);
-                    *gws=NULL;
+                    *gws = NULL;
                 }
-                ret=PCP_ERR_NO_MEM;
+                ret = PCP_ERR_NO_MEM;
                 goto end;
             }
-            *gws=tmp_gws;
-            (*gws + ret)->sin6_family=AF_INET6;
+            *gws = tmp_gws;
+            (*gws + ret)->sin6_family = AF_INET6;
             memcpy(&((*gws + ret)->sin6_addr), &addr, sizeof(addr));
-            (*gws + ret)->sin6_scope_id=scope_id;
+            (*gws + ret)->sin6_scope_id = scope_id;
             SET_SA_LEN(*gws + ret, sizeof(struct sockaddr_in6))
             ret++;
         }
@@ -270,7 +271,7 @@ end:
 
 #endif /* #ifdef USE_NETLINK */
 
-#if defined (USE_WIN32_CODE) && defined(WIN32)
+#if defined(USE_WIN32_CODE) && defined(WIN32)
 
 #if 0 // WINVER>=NTDDI_VISTA
 int getgateways(struct in6_addr **gws)
@@ -311,54 +312,53 @@ int getgateways(struct in6_addr **gws)
     return i;
 }
 #else
-int getgateways(struct sockaddr_in6 **gws)
-{
+int getgateways(struct sockaddr_in6 **gws) {
     PMIB_IPFORWARDTABLE ipf_table;
-    DWORD ipft_size=0;
+    DWORD ipft_size = 0;
     int i, ret;
 
     if (!gws) {
         return PCP_ERR_UNKNOWN;
     }
 
-    ipf_table=(MIB_IPFORWARDTABLE *)malloc(sizeof(MIB_IPFORWARDTABLE));
+    ipf_table = (MIB_IPFORWARDTABLE *)malloc(sizeof(MIB_IPFORWARDTABLE));
     if (!ipf_table) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-        ret=PCP_ERR_NO_MEM;
+        ret = PCP_ERR_NO_MEM;
         goto end;
     }
 
-    if (GetIpForwardTable(ipf_table, &ipft_size, 0)
-            == ERROR_INSUFFICIENT_BUFFER) {
+    if (GetIpForwardTable(ipf_table, &ipft_size, 0) ==
+        ERROR_INSUFFICIENT_BUFFER) {
         MIB_IPFORWARDTABLE *new_ipf_table;
-        new_ipf_table=(MIB_IPFORWARDTABLE *)realloc(ipf_table, ipft_size);
+        new_ipf_table = (MIB_IPFORWARDTABLE *)realloc(ipf_table, ipft_size);
         if (!new_ipf_table) {
             PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-            ret=PCP_ERR_NO_MEM;
+            ret = PCP_ERR_NO_MEM;
             goto end;
         }
-        ipf_table=new_ipf_table;
+        ipf_table = new_ipf_table;
     }
 
     if (GetIpForwardTable(ipf_table, &ipft_size, 0) != NO_ERROR) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "GetIpForwardTable failed.");
-        ret=PCP_ERR_UNKNOWN;
+        ret = PCP_ERR_UNKNOWN;
         goto end;
     }
 
-    *gws=(struct sockaddr_in6 *)calloc(ipf_table->dwNumEntries,
-            sizeof(struct sockaddr_in6));
+    *gws = (struct sockaddr_in6 *)calloc(ipf_table->dwNumEntries,
+                                         sizeof(struct sockaddr_in6));
     if (!*gws) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-        ret=PCP_ERR_NO_MEM;
+        ret = PCP_ERR_NO_MEM;
         goto end;
     }
 
-    for (ret=0, i=0; i < (int)ipf_table->dwNumEntries; i++) {
+    for (ret = 0, i = 0; i < (int)ipf_table->dwNumEntries; i++) {
         if (ipf_table->table[i].dwForwardType == MIB_IPROUTE_TYPE_INDIRECT) {
             (*gws)[ret].sin6_family = AF_INET6;
-            S6_ADDR32(&(*gws)[ret].sin6_addr)[0]=
-                (uint32_t)ipf_table->table[i].dwForwardNextHop;
+            S6_ADDR32(&(*gws)[ret].sin6_addr)
+            [0] = (uint32_t)ipf_table->table[i].dwForwardNextHop;
             TO_IPV6MAPPED(&(*gws)[ret].sin6_addr);
             ret++;
         }
@@ -387,47 +387,46 @@ struct in6_addr;
 
 /*
  * Step to next socket address structure;
- * if sa_len is 0, assume it is sizeof(u_long). Using u_long only works on 32-bit
- machines. In 64-bit machines it needs to be u_int32_t !!
+ * if sa_len is 0, assume it is sizeof(u_long). Using u_long only works on
+ 32-bit machines. In 64-bit machines it needs to be u_int32_t !!
  */
-#define NEXT_SA(ap)    ap = (struct sockaddr *) \
-    ((caddr_t) ap + (ap->sa_len ? ROUNDUP(ap->sa_len, sizeof(uint32_t)) : \
-                                    sizeof(uint32_t)))
+#define NEXT_SA(ap)                                                            \
+    ap = (struct sockaddr *)((caddr_t)ap +                                     \
+                             (ap->sa_len                                       \
+                                  ? ROUNDUP(ap->sa_len, sizeof(uint32_t))      \
+                                  : sizeof(uint32_t)))
 
 /* thanks Stevens for this very handy function */
 static void get_rtaddrs(int addrs, struct sockaddr *sa,
-        struct sockaddr **rti_info)
-{
+                        struct sockaddr **rti_info) {
     int i;
 
-    for (i=0; i < RTAX_MAX; i++) {
+    for (i = 0; i < RTAX_MAX; i++) {
         if (addrs & (1 << i)) {
-            rti_info[i]=sa;
+            rti_info[i] = sa;
             NEXT_SA(sa);
         } else
-            rti_info[i]=NULL;
+            rti_info[i] = NULL;
     }
 }
 
 /* Portable (hopefully) function to lookup routing tables. sysctl()'s
  advantage is that it does not need root permissions. Routing sockets
  need root permission since it is of type SOCK_RAW. */
-static char *
-net_rt_dump(int type, int family, int flags, size_t *lenp)
-{
+static char *net_rt_dump(int type, int family, int flags, size_t *lenp) {
     int mib[6];
     char *buf;
 
-    mib[0]=CTL_NET;
-    mib[1]=AF_ROUTE;
-    mib[2]=0;
-    mib[3]=family; /* only addresses of this family */
-    mib[4]=type;
-    mib[5]=flags; /* not looked at with NET_RT_DUMP */
+    mib[0] = CTL_NET;
+    mib[1] = AF_ROUTE;
+    mib[2] = 0;
+    mib[3] = family; /* only addresses of this family */
+    mib[4] = type;
+    mib[5] = flags; /* not looked at with NET_RT_DUMP */
     if (sysctl(mib, 6, NULL, lenp, NULL, 0) < 0)
         return (NULL);
 
-    if ((buf=malloc(*lenp)) == NULL)
+    if ((buf = malloc(*lenp)) == NULL)
         return (NULL);
     if (sysctl(mib, 6, buf, lenp, NULL, 0) < 0)
         return (NULL);
@@ -441,36 +440,35 @@ net_rt_dump(int type, int family, int flags, size_t *lenp)
 
  It is up to the caller to weed out duplicates
  */
-int getgateways(struct sockaddr_in6 **gws)
-{
+int getgateways(struct sockaddr_in6 **gws) {
     char *buf, *next, *lim;
     size_t len;
     struct rt_msghdr *rtm;
     struct sockaddr *sa, *rti_info[RTAX_MAX];
-    int rtcount=0;
+    int rtcount = 0;
 
     if (!gws) {
         return PCP_ERR_UNKNOWN;
     }
 
     /* net_rt_dump() will return all route entries with gateways */
-    buf=net_rt_dump(NET_RT_FLAGS, 0, RTF_GATEWAY, &len);
+    buf = net_rt_dump(NET_RT_FLAGS, 0, RTF_GATEWAY, &len);
     if (!buf)
         return PCP_ERR_UNKNOWN;
-    lim=buf + len;
-    for (next=buf; next < lim; next+=rtm->rtm_msglen) {
-        rtm=(struct rt_msghdr *)next;
-        sa=(struct sockaddr *)(rtm + 1);
+    lim = buf + len;
+    for (next = buf; next < lim; next += rtm->rtm_msglen) {
+        rtm = (struct rt_msghdr *)next;
+        sa = (struct sockaddr *)(rtm + 1);
         get_rtaddrs(rtm->rtm_addrs, sa, rti_info);
 
-        if ((sa=rti_info[RTAX_GATEWAY]) != NULL)
+        if ((sa = rti_info[RTAX_GATEWAY]) != NULL)
 
-            if ((rtm->rtm_addrs & (RTA_DST | RTA_GATEWAY))
-                    == (RTA_DST | RTA_GATEWAY)) {
-                struct sockaddr_in6 *in6=*gws;
+            if ((rtm->rtm_addrs & (RTA_DST | RTA_GATEWAY)) ==
+                (RTA_DST | RTA_GATEWAY)) {
+                struct sockaddr_in6 *in6 = *gws;
 
-                *gws=(struct sockaddr_in6 *)realloc(*gws,
-                        sizeof(struct sockaddr_in6) * (rtcount + 1));
+                *gws = (struct sockaddr_in6 *)realloc(
+                    *gws, sizeof(struct sockaddr_in6) * (rtcount + 1));
 
                 if (!*gws) {
                     if (in6)
@@ -479,19 +477,20 @@ int getgateways(struct sockaddr_in6 **gws)
                     return PCP_ERR_NO_MEM;
                 }
 
-                in6=(*gws) + rtcount;
+                in6 = (*gws) + rtcount;
                 memset(in6, 0, sizeof(struct sockaddr_in6));
 
                 if (sa->sa_family == AF_INET) {
-                    /* IPv4 gateways as returned as IPv4 mapped IPv6 addresses */
+                    /* IPv4 gateways as returned as IPv4 mapped IPv6 addresses
+                     */
                     in6->sin6_family = AF_INET6;
-                    S6_ADDR32(&in6->sin6_addr)[0]=
-                            ((struct sockaddr_in *)(rti_info[RTAX_GATEWAY]))->sin_addr.s_addr;
+                    S6_ADDR32(&in6->sin6_addr)
+                    [0] = ((struct sockaddr_in *)(rti_info[RTAX_GATEWAY]))
+                              ->sin_addr.s_addr;
                     TO_IPV6MAPPED(&in6->sin6_addr);
                 } else if (sa->sa_family == AF_INET6) {
-                    memcpy(in6,
-                            (struct sockaddr_in6 *)rti_info[RTAX_GATEWAY],
-                            sizeof(struct sockaddr_in6));
+                    memcpy(in6, (struct sockaddr_in6 *)rti_info[RTAX_GATEWAY],
+                           sizeof(struct sockaddr_in6));
                 } else {
                     continue;
                 }
@@ -578,12 +577,15 @@ static int route_op(u_char op, in_addr_t *dst, in_addr_t *mask,
         route_out_t *routeout)
 {
 
-#define ROUNDUP_CT(n)  ((n) > 0 ? (1 + (((n) - 1) | (sizeof(uint32_t) - 1))) : sizeof(uint32_t))
+#define ROUNDUP_CT(n)                                                          \
+    ((n) > 0 ? (1 + (((n)-1) | (sizeof(uint32_t) - 1))) : sizeof(uint32_t))
 #define ADVANCE_CT(x, n) (x += ROUNDUP_CT((n)->sa_len))
 
-#define NEXTADDR_CT(w, u) \
-    if (msg.msghdr.rtm_addrs & (w)) {\
-        len = ROUNDUP_CT(u.sa.sa_len); bcopy((char *)&(u), cp, len); cp += len;\
+#define NEXTADDR_CT(w, u)                                                      \
+    if (msg.msghdr.rtm_addrs & (w)) {                                          \
+        len = ROUNDUP_CT(u.sa.sa_len);                                         \
+        bcopy((char *)&(u), cp, len);                                          \
+        cp += len;                                                             \
     }
 
     static int seq=0;
@@ -953,6 +955,6 @@ static int get_if_addr_from_name(char *ifname, struct sockaddr *ifsock,
     freeifaddrs(ifaddr);
     return -1;
 }
-#endif //0
+#endif // 0
 
 #endif

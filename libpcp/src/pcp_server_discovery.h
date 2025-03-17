@@ -30,6 +30,6 @@
 
 void psd_add_gws(pcp_ctx_t *ctx);
 pcp_errno psd_add_pcp_server(pcp_ctx_t *ctx, struct sockaddr *sa,
-        uint8_t version);
+                             uint8_t version);
 
 #endif /* PCP_SERVER_DISCOVERY_H_ */

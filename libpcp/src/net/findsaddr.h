@@ -27,9 +27,9 @@
 #define FINDSADDR_UDP_H_
 
 const char *findsaddr(register const struct sockaddr_in *to,
-        struct in6_addr *from);
+                      struct in6_addr *from);
 
 const char *findsaddr6(register const struct sockaddr_in6 *to,
-        register struct in6_addr *from, uint32_t *from_scope_id);
+                       register struct in6_addr *from, uint32_t *from_scope_id);
 
-#endif //FINDSADDR_UDP_H_
+#endif // FINDSADDR_UDP_H_

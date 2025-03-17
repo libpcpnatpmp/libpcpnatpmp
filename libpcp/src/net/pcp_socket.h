@@ -68,20 +68,23 @@ struct pcp_ctx_s;
 
 extern pcp_socket_vt_t default_socket_vt;
 
-void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port, uint32_t *dst_scope_id,
-        struct sockaddr *src);
+void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
+                       uint32_t *dst_scope_id, struct sockaddr *src);
 
 void pcp_fill_sockaddr(struct sockaddr *dst, struct in6_addr *sip,
-        uint16_t sport, int ret_ipv6_mapped_ipv4, uint32_t scope_id);
+                       uint16_t sport, int ret_ipv6_mapped_ipv4,
+                       uint32_t scope_id);
 
 PCP_SOCKET pcp_socket_create(struct pcp_ctx_s *ctx, int domain, int type,
-        int protocol);
+                             int protocol);
 
 ssize_t pcp_socket_recvfrom(struct pcp_ctx_s *ctx, void *buf, size_t len,
-        int flags, struct sockaddr *src_addr, socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
+                            int flags, struct sockaddr *src_addr,
+                            socklen_t *addrlen, struct sockaddr_in6 *dst_addr);
 
 ssize_t pcp_socket_sendto(struct pcp_ctx_s *ctx, const void *buf, size_t len,
-        int flags, struct sockaddr_in6 *src_addr, struct sockaddr *dest_addr, socklen_t addrlen);
+                          int flags, struct sockaddr_in6 *src_addr,
+                          struct sockaddr *dest_addr, socklen_t addrlen);
 
 int pcp_socket_close(struct pcp_ctx_s *ctx);
 
@@ -92,29 +95,28 @@ int pcp_socket_close(struct pcp_ctx_s *ctx);
 
 #ifndef SA_LEN
 #ifdef HAVE_SOCKADDR_SA_LEN
-#define SA_LEN(addr)    ((addr)->sa_len)
+#define SA_LEN(addr) ((addr)->sa_len)
 #else /* HAVE_SOCKADDR_SA_LEN */
 
-static inline size_t get_sa_len(struct sockaddr *addr)
-{
+static inline size_t get_sa_len(struct sockaddr *addr) {
     switch (addr->sa_family) {
 
-        case AF_INET:
-            return (sizeof(struct sockaddr_in));
+    case AF_INET:
+        return (sizeof(struct sockaddr_in));
 
-        case AF_INET6:
-            return (sizeof(struct sockaddr_in6));
+    case AF_INET6:
+        return (sizeof(struct sockaddr_in6));
 
-        default:
-            return (sizeof(struct sockaddr));
+    default:
+        return (sizeof(struct sockaddr));
     }
 }
-#define SA_LEN(addr)    (get_sa_len(addr))
+#define SA_LEN(addr) (get_sa_len(addr))
 #endif /* HAVE_SOCKADDR_SA_LEN */
 #endif /* SA_LEN */
 
 #ifdef HAVE_SOCKADDR_SA_LEN
-#define SET_SA_LEN(s, l) ((struct sockaddr*)s)->sa_len=l
+#define SET_SA_LEN(s, l) ((struct sockaddr *)s)->sa_len = l
 #else
 #define SET_SA_LEN(s, l)
 #endif

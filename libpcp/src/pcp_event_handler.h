@@ -29,19 +29,22 @@
 #include "pcp_msg_structs.h"
 
 typedef enum {
-    pfs_any                         = -1,
-    pfs_idle                        = 0,
-    pfs_wait_for_server_init        = 1,
-    pfs_send                        = 2,
-    pfs_wait_resp                   = 3,
+    pfs_any = -1,
+    pfs_idle = 0,
+    pfs_wait_for_server_init = 1,
+    pfs_send = 2,
+    pfs_wait_resp = 3,
     pfs_wait_after_short_life_error = 4,
-    pfs_wait_for_lifetime_renew     = 5,
-    pfs_send_renew                  = 6,
-    pfs_failed                      = 7
+    pfs_wait_for_lifetime_renew = 5,
+    pfs_send_renew = 6,
+    pfs_failed = 7
 } pcp_flow_state_e;
 
 typedef enum {
-    pcpe_any, pcpe_timeout, pcpe_io_event, pcpe_terminate
+    pcpe_any,
+    pcpe_timeout,
+    pcpe_io_event,
+    pcpe_terminate
 } pcp_event_e;
 
 typedef enum {
@@ -54,24 +57,24 @@ typedef enum {
     fev_server_restarted,
     fev_ignored,
     FEV_RES_BEGIN,
-    fev_res_success           = FEV_RES_BEGIN + PCP_RES_SUCCESS,
-    fev_res_unsupp_version    = FEV_RES_BEGIN + PCP_RES_UNSUPP_VERSION,
-    fev_res_not_authorized    = FEV_RES_BEGIN + PCP_RES_NOT_AUTHORIZED,
+    fev_res_success = FEV_RES_BEGIN + PCP_RES_SUCCESS,
+    fev_res_unsupp_version = FEV_RES_BEGIN + PCP_RES_UNSUPP_VERSION,
+    fev_res_not_authorized = FEV_RES_BEGIN + PCP_RES_NOT_AUTHORIZED,
     fev_res_malformed_request = FEV_RES_BEGIN + PCP_RES_MALFORMED_REQUEST,
-    fev_res_unsupp_opcode     = FEV_RES_BEGIN + PCP_RES_UNSUPP_OPCODE,
-    fev_res_unsupp_option     = FEV_RES_BEGIN + PCP_RES_UNSUPP_OPTION,
-    fev_res_malformed_option  = FEV_RES_BEGIN + PCP_RES_MALFORMED_OPTION,
-    fev_res_network_failure   = FEV_RES_BEGIN + PCP_RES_NETWORK_FAILURE,
-    fev_res_no_resources      = FEV_RES_BEGIN + PCP_RES_NO_RESOURCES,
-    fev_res_unsupp_protocol   = FEV_RES_BEGIN + PCP_RES_UNSUPP_PROTOCOL,
-    fev_res_user_ex_quota     = FEV_RES_BEGIN + PCP_RES_USER_EX_QUOTA,
-    fev_res_cant_provide_ext  = FEV_RES_BEGIN + PCP_RES_CANNOT_PROVIDE_EXTERNAL,
-    fev_res_address_mismatch  = FEV_RES_BEGIN + PCP_RES_ADDRESS_MISMATCH,
-    fev_res_exc_remote_peers  = FEV_RES_BEGIN + PCP_RES_EXCESSIVE_REMOTE_PEERS,
+    fev_res_unsupp_opcode = FEV_RES_BEGIN + PCP_RES_UNSUPP_OPCODE,
+    fev_res_unsupp_option = FEV_RES_BEGIN + PCP_RES_UNSUPP_OPTION,
+    fev_res_malformed_option = FEV_RES_BEGIN + PCP_RES_MALFORMED_OPTION,
+    fev_res_network_failure = FEV_RES_BEGIN + PCP_RES_NETWORK_FAILURE,
+    fev_res_no_resources = FEV_RES_BEGIN + PCP_RES_NO_RESOURCES,
+    fev_res_unsupp_protocol = FEV_RES_BEGIN + PCP_RES_UNSUPP_PROTOCOL,
+    fev_res_user_ex_quota = FEV_RES_BEGIN + PCP_RES_USER_EX_QUOTA,
+    fev_res_cant_provide_ext = FEV_RES_BEGIN + PCP_RES_CANNOT_PROVIDE_EXTERNAL,
+    fev_res_address_mismatch = FEV_RES_BEGIN + PCP_RES_ADDRESS_MISMATCH,
+    fev_res_exc_remote_peers = FEV_RES_BEGIN + PCP_RES_EXCESSIVE_REMOTE_PEERS,
 } pcp_flow_event_e;
 
 typedef enum {
-    pss_any=-1,
+    pss_any = -1,
     pss_unitialized,
     pss_allocated,
     pss_ping,
