@@ -114,16 +114,10 @@ void pcp_fill_in6_addr(struct in6_addr *dst_ip6, uint16_t *dst_port,
         struct sockaddr_in *src_ip4=(struct sockaddr_in *)src;
 
         if (dst_ip6) {
-            if (src_ip4->sin_addr.s_addr != INADDR_ANY) {
-                S6_ADDR32(dst_ip6)[0]=0;
-                S6_ADDR32(dst_ip6)[1]=0;
-                S6_ADDR32(dst_ip6)[2]=htonl(0xFFFF);
-                S6_ADDR32(dst_ip6)[3]=src_ip4->sin_addr.s_addr;
-            } else {
-                unsigned i;
-                for (i=0; i < 4; ++i)
-                    S6_ADDR32(dst_ip6)[i]=0;
-            }
+            S6_ADDR32(dst_ip6)[0]=0;
+            S6_ADDR32(dst_ip6)[1]=0;
+            S6_ADDR32(dst_ip6)[2]=htonl(0xFFFF);
+            S6_ADDR32(dst_ip6)[3]=src_ip4->sin_addr.s_addr;
         }
         if (dst_port) {
             *dst_port=src_ip4->sin_port;

@@ -128,6 +128,14 @@
 #define S6_ADDR32(sa6) ((uint32_t *)((sa6)->s6_addr))
 #endif
 
+#define IPV6_IS_ADDR_ANY(a) ( \
+    IN6_IS_ADDR_UNSPECIFIED(a) || \
+    (IN6_IS_ADDR_V4MAPPED(a) && (a)->s6_addr[12] == 0 && \
+                                  (a)->s6_addr[13] == 0 && \
+                                  (a)->s6_addr[14] == 0 && \
+                                  (a)->s6_addr[15] == 0) \
+)
+
 #define IPV6_ADDR_COPY(dest, src)   \
     do {                            \
         (S6_ADDR32(dest))[0]=(S6_ADDR32(src))[0];       \
