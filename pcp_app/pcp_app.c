@@ -786,7 +786,8 @@ static inline void parse_opt_location(struct pcp_params *p) {
 }
 
 static inline void parse_opt_user_id(struct pcp_params *p) {
-    strncpy(p->app_userid.userid, optarg, sizeof(p->app_userid.userid));
+    strncpy(p->app_userid.userid, optarg, sizeof(p->app_userid.userid) - 1);
+    p->app_userid.userid[sizeof(p->app_userid.userid) - 1] = '\0';
     fprintf(stderr, "Userid: %s \n", &(p->app_userid.userid[0]));
 }
 
