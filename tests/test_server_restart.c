@@ -19,8 +19,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef WIN32
-#include <windows.h>
 #include <winsock2.h>
+
+#include <windows.h>
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>

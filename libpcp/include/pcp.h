@@ -27,10 +27,13 @@
 #define PCP_H
 
 #ifdef WIN32
-#include <in6addr.h>
-#include <time.h>
 #include <winsock2.h>
+
+#include <in6addr.h>
+
 #include <ws2tcpip.h>
+
+#include <time.h>
 #if !defined ssize_t && defined _MSC_VER
 typedef int ssize_t;
 #endif

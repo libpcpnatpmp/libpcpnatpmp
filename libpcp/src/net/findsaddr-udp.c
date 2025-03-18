@@ -38,10 +38,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #else
-#include <stdint.h>
 #include <winsock2.h>
 #include <ws2tcpip.h> /*sockaddr, addrinfo etc.*/
-#endif                /*WIN32*/
+
+#include <stdint.h>
+#endif /*WIN32*/
 
 #include "findsaddr.h"
 #include "pcp.h"

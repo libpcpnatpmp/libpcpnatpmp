@@ -63,7 +63,6 @@ if (WIN32)
 set(LIBPCP_INC_FILES
     ${LIBPCP_INC_FILES}
     ${WIN_SOURCE_FILES}/windows/pcp_win_defines.h
-    ${WIN_SOURCE_FILES}/windows/stdint.h
     ${WIN_SOURCE_FILES}/windows/pcp_gettimeofday.h
     )
 endif()

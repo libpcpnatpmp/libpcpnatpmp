@@ -29,7 +29,6 @@
 #include "pcp.h"
 #include "pcp_event_handler.h"
 #include "pcp_msg_structs.h"
-#include <netinet/in.h>
 #include <stdint.h>
 #ifdef WIN32
 #include "pcp_win_defines.h"

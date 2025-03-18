@@ -26,12 +26,17 @@
 #ifndef PCP_WIN_DEFINES
 #define PCP_WIN_DEFINES
 
-#include "stdint.h"
 #include <time.h>
-#include <winbase.h> /*GetCurrentProcessId*/ /*link with kernel32.dll*/
+
 #include <winsock2.h>
-#include <ws2ipdef.h>
+
 #include <ws2tcpip.h>
+
+#include <ws2ipdef.h>
+
+#include <winbase.h> /*GetCurrentProcessId*/ /*link with kernel32.dll*/
+
+#include <stdint.h>
 /* windows uses Sleep(miliseconds) method, instead of UNIX sleep(seconds) */
 #define sleep(x) Sleep((x)*1000)
 
@@ -75,8 +80,6 @@ static inline const char *pcp_inet_ntop(int af, const void *src, char *dst,
 #define strdup _strdup
 
 #define getpid GetCurrentProcessId
-
-#define snprintf _snprintf
 
 int gettimeofday(struct timeval *tv, struct timezone *tz);
 
