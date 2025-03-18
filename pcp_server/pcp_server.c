@@ -42,14 +42,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 #ifdef WIN32
+#include <winsock2.h>
+
 #include "pcp_gettimeofday.h"
 #include <io.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <winsock2.h>
 /* "PI" for Platform Independent*/
 #define PI_TIMEOUT_STRUCT DWORD
 #define SET_PI_TIMEOUT(dest, source)                                           \
@@ -66,6 +66,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #define PI_TIMEOUT_STRUCT struct timeval
 #define SET_PI_TIMEOUT(dest, source)                                           \

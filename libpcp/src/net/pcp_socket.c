@@ -321,7 +321,7 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
     ssize_t ret = -1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
-#if defined(IPV6_PKTINFO) && defined(IP_PKTINFO)
+#if defined(IPV6_PKTINFO) && defined(IP_PKTINFO) && !defined(WIN32)
     // Buffer pre kontrolné správy
     char control_buf[1024];
 
@@ -369,9 +369,9 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
             }
         }
     }
-#else  // IPV6_PKTINFO && IP_PKTINFO
+#else  // IPV6_PKTINFO && IP_PKTINFO && !WIN32
     ret = recvfrom(sock, buf, len, flags, src_addr, addrlen);
-#endif // IPV6_PKTINFO && IP_PKTINFO
+#endif // IPV6_PKTINFO && IP_PKTINFO && !WIN32
     if (ret == PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
             ret = PCP_ERR_WOULDBLOCK;
@@ -393,7 +393,7 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
 
-#ifdef IPV6_PKTINFO
+#if defined(IPV6_PKTINFO) && !defined(WIN32)
     if (src_addr) {
         struct iovec iov;
         struct in6_pktinfo ipi6;
@@ -419,11 +419,11 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         msg.msg_namelen = addrlen;
         ret = sendmsg(sock, &msg, flags);
     } else {
-#endif /* IPV6_PKTINFO */
+#endif /* IPV6_PKTINFO  && !WIN32*/
         ret = sendto(sock, buf, len, 0, dest_addr, addrlen);
-#ifdef IPV6_PKTINFO
+#if defined(IPV6_PKTINFO) && !defined(WIN32)
     }
-#endif /* IPV6_PKTINFO */
+#endif /* IPV6_PKTINFO && !WIN32*/
 
     if ((ret == PCP_SOCKET_ERROR) || (ret != (ssize_t)len)) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {

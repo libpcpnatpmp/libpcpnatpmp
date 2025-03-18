@@ -55,15 +55,19 @@
 #undef USE_SOCKET_ROUTE
 #define USE_WIN32_CODE
 
-#include "pcp_win_defines.h"
-#include <Iphlpapi.h>
 #include <winsock2.h>
 #include <ws2ipdef.h>
+
+#include <Iphlpapi.h>
+
 #include <ws2tcpip.h>
+
+#include "pcp_win_defines.h"
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
 #include <net/if_dl.h> //struct sockaddr_dl
+
 #include <sys/sysctl.h>
 #define USE_SOCKET_ROUTE
 #endif
