@@ -32,7 +32,6 @@
 
 #include "getopt.h"
 #include "pcp.h"
-#include "pcp_msg_structs.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>

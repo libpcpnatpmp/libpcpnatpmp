@@ -1,29 +1,30 @@
-set(INC 
-        ${CMAKE_SOURCE_DIR}/libpcp/src
-        ${CMAKE_SOURCE_DIR}/libpcp/include)
-set(INCLUDE_NET 
-        ${CMAKE_SOURCE_DIR}/libpcp/src/net)
+set (PCP_CLIENT_SRC
+    pcp_app.c
+)
 
 if (WIN32)
-set(INC
-        ${INC}
-        ${CMAKE_SOURCE_DIR}/libpcp/src/net
-        ${CMAKE_SOURCE_DIR}/libpcp/src/windows
-        ${CMAKE_SOURCE_DIR}/pcp_app/windows/src
-        ${CMAKE_SOURCE_DIR}/pcp_app/windows/include
-        ${CMAKE_SOURCE_DIR}/win_utils
-        )
-set(ADDITIONAL_SRC
-        ${CMAKE_SOURCE_DIR}/win_utils/getopt.c
-        ${CMAKE_SOURCE_DIR}/win_utils/getopt_long.c
-        ${CMAKE_SOURCE_DIR}/libpcp/src/windows/pcp_gettimeofday.c)
-endif()
+    list (APPEND PCP_CLIENT_SRC
+        ../win_utils/getopt.c
+        ../win_utils/getopt_long.c
+        ../libpcp/src/windows/pcp_gettimeofday.c
+    )
+endif ()
 
-include_directories(${INC} ${INCLUDE_NET})
+add_executable (pcpnatpmpc ${PCP_CLIENT_SRC})
 
-#name collision if executable is called "pcp"
-# the name of the library is "pcp" even though Cmake prepends "lib" in front
-# of the name to form "libpcp"
-add_executable(pcp pcp_app.c ${ADDITIONAL_SRC})
+target_link_libraries (pcpnatpmpc pcpnatpmp)
+target_include_directories (pcpnatpmpc PRIVATE
+    ../libpcp
+    ../libpcp/src
+    ../libpcp/src/net
+)
 
-target_link_libraries(pcp ${LIB_LIBPCP} ${WIN_SOCK_LIBS})
+if (WIN32)
+    target_include_directories (pcpnatpmpc PRIVATE
+        ../libpcp
+        ../libpcp/src
+        ../libpcp/src/net
+        ../libpcp/src/windows
+        ../win_utils
+    )
+endif ()
