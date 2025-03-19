@@ -110,7 +110,7 @@ int main(void) {
     sleep(2);
     pcp_pulse(ctx, NULL);
     TEST(pcp_wait(flow, 43000, 0) == pcp_state_failed);
-    TEST(s->server_state == pss_not_working);
+    TEST(s->server_state == pss_ping);
 
     pcp_terminate(ctx, 1);
 
@@ -126,20 +126,20 @@ int main(void) {
     pcp_flow_updated(flow);
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_not_working);
+    TEST(s->server_state == pss_ping);
 
     s->server_state = pss_ping;
     pcp_flow_updated(flow);
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_not_working);
+    TEST(s->server_state == pss_ping);
 
     s->server_state = pss_ping;
     pcp_flow_updated(flow);
     s->ping_flow_msg = NULL;
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_not_working);
+    TEST(s->server_state == pss_ping);
 
     s->server_state = pss_wait_io;
     flow->state = pfs_wait_for_lifetime_renew;
@@ -161,7 +161,7 @@ int main(void) {
     pcp_flow_updated(flow);
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_not_working);
+    TEST(s->server_state == pss_ping);
 
     s->server_state = pss_version_negotiation;
     s->next_version = s->pcp_version;
@@ -170,7 +170,7 @@ int main(void) {
     pcp_flow_updated(flow);
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_wait_ping_resp);
+    TEST(s->server_state == pss_ping);
     TEST(s->pcp_version == PCP_MAX_SUPPORTED_VERSION);
 
     s->server_state = pss_version_negotiation;
@@ -189,7 +189,7 @@ int main(void) {
     pcp_flow_updated(flow);
     sleep(1);
     pcp_pulse(ctx, NULL);
-    TEST(s->server_state == pss_wait_ping_resp);
+    TEST(s->server_state == pss_ping);
 
     s->server_state = pss_wait_ping_resp;
     s->ping_count = PCP_MAX_PING_COUNT - 1;

@@ -277,11 +277,10 @@ end:
 
 #if defined(USE_WIN32_CODE) && defined(WIN32)
 
-#if 0 // WINVER>=NTDDI_VISTA
-int getgateways(struct in6_addr **gws)
-{
+int getgateways(struct sockaddr_in6 **gws) {
     PMIB_IPFORWARD_TABLE2 ipf_table;
     unsigned int i;
+    int ret = 0;
 
     if (!gws) {
         return PCP_ERR_UNKNOWN;
@@ -295,86 +294,36 @@ int getgateways(struct in6_addr **gws)
         return PCP_ERR_UNKNOWN;
     }
 
-    *gws=(struct in6_addr *)calloc(ipf_table->NumEntries,
-            sizeof(struct in6_addr));
-    if (*gws) {
+    *gws = (struct sockaddr_in6 *)calloc(ipf_table->NumEntries,
+                                         sizeof(struct sockaddr_in6));
+    if (!*gws) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
         return PCP_ERR_NO_MEM;
     }
 
-    for (i=0; i < ipf_table->NumEntries; ++i) {
-        if (ipf_table->Table[i].NextHop.si_family == AF_INET) {
-            S6_ADDR32((*gws)+i)[0]=
-                    ipf_table->Table[i].NextHop.Ipv4.sin_addr.s_addr;
-            TO_IPV6MAPPED(((*gws)+i));
-        }
-        if (ipf_table->Table[i].NextHop.si_family == AF_INET6) {
-            memcpy((*gws) + i, &ipf_table->Table[i].NextHop.Ipv6.sin6_addr,
-                    sizeof(struct in6_addr));
-        }
-    }
-    return i;
-}
-#else
-int getgateways(struct sockaddr_in6 **gws) {
-    PMIB_IPFORWARDTABLE ipf_table;
-    DWORD ipft_size = 0;
-    int i, ret;
-
-    if (!gws) {
-        return PCP_ERR_UNKNOWN;
-    }
-
-    ipf_table = (MIB_IPFORWARDTABLE *)malloc(sizeof(MIB_IPFORWARDTABLE));
-    if (!ipf_table) {
-        PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-        ret = PCP_ERR_NO_MEM;
-        goto end;
-    }
-
-    if (GetIpForwardTable(ipf_table, &ipft_size, 0) ==
-        ERROR_INSUFFICIENT_BUFFER) {
-        MIB_IPFORWARDTABLE *new_ipf_table;
-        new_ipf_table = (MIB_IPFORWARDTABLE *)realloc(ipf_table, ipft_size);
-        if (!new_ipf_table) {
-            PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-            ret = PCP_ERR_NO_MEM;
-            goto end;
-        }
-        ipf_table = new_ipf_table;
-    }
-
-    if (GetIpForwardTable(ipf_table, &ipft_size, 0) != NO_ERROR) {
-        PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "GetIpForwardTable failed.");
-        ret = PCP_ERR_UNKNOWN;
-        goto end;
-    }
-
-    *gws = (struct sockaddr_in6 *)calloc(ipf_table->dwNumEntries,
-                                         sizeof(struct sockaddr_in6));
-    if (!*gws) {
-        PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error allocating memory");
-        ret = PCP_ERR_NO_MEM;
-        goto end;
-    }
-
-    for (ret = 0, i = 0; i < (int)ipf_table->dwNumEntries; i++) {
-        if (ipf_table->table[i].dwForwardType == MIB_IPROUTE_TYPE_INDIRECT) {
+    for (i = 0; i < ipf_table->NumEntries; ++i) {
+        MIB_IPFORWARD_ROW2 *row = ipf_table->Table + i;
+        if ((row->NextHop.si_family == AF_INET6) &&
+            (IPV6_IS_ADDR_ANY(&row->NextHop.Ipv6.sin6_addr))) {
+            continue;
+        } else if ((row->NextHop.si_family == AF_INET) &&
+                   (&row->NextHop.Ipv6.sin6_addr == INADDR_ANY)) {
+            continue;
+        } else if (row->NextHop.si_family == AF_INET) {
             (*gws)[ret].sin6_family = AF_INET6;
             S6_ADDR32(&(*gws)[ret].sin6_addr)
-            [0] = (uint32_t)ipf_table->table[i].dwForwardNextHop;
+            [0] = row->NextHop.Ipv4.sin_addr.s_addr;
             TO_IPV6MAPPED(&(*gws)[ret].sin6_addr);
-            ret++;
+            ++ret;
+        } else if (row->NextHop.si_family == AF_INET6) {
+            memcpy((&(*gws)[ret]), &row->NextHop.Ipv6,
+                   sizeof(struct sockaddr_in6));
+            ++ret;
         }
     }
-end:
-    if (ipf_table)
-        free(ipf_table);
-
+    FreeMibTable(ipf_table);
     return ret;
 }
-#endif
-
 #endif /* #ifdef USE_WIN32_CODE */
 
 #ifdef USE_SOCKET_ROUTE

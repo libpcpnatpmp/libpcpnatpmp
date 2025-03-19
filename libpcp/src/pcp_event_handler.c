@@ -748,10 +748,16 @@ static int get_first_flow_iter(pcp_flow_t *f, void *data) {
     struct get_first_flow_iter_data *d =
         (struct get_first_flow_iter_data *)data;
 
-    if (f->pcp_server_indx == d->s->index) {
+    if (f->pcp_server_indx != d->s->index) {
+        return 0;
+    }
+    switch (f->state) {
+    case pfs_idle:
+    case pfs_wait_for_server_init:
+    case pfs_send:
         d->msg = f;
         return 1;
-    } else {
+    default:
         return 0;
     }
 }
@@ -811,33 +817,26 @@ static int flow_send_event_iter(pcp_flow_t *f, void *data) {
 //                 Server state machine event handlers
 
 static pcp_server_state_e handle_server_ping(pcp_server_t *s) {
-    pcp_flow_t *msg;
+    pcp_flow_t *msg = NULL;
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
     s->ping_count = 0;
 
-    msg = get_ping_msg(s);
+    while ((msg = get_ping_msg(s)) != NULL) {
+        msg->retry_count = 0;
 
-    if (!msg) {
-        s->next_timeout.tv_sec = 0;
-        s->next_timeout.tv_usec = 0;
-        return pss_ping;
+        PCP_LOG(PCP_LOGLVL_INFO, "Pinging PCP server at address %s",
+                s->pcp_server_paddr);
+
+        if (handle_flow_event(msg, fev_send, NULL) != pfs_failed) {
+            s->next_timeout = msg->timeout;
+
+            PCP_LOG_END(PCP_LOGLVL_DEBUG);
+            return pss_wait_ping_resp;
+        }
     }
-
-    msg->retry_count = 0;
-
-    PCP_LOG(PCP_LOGLVL_INFO, "Pinging PCP server at address %s",
-            s->pcp_server_paddr);
-
-    if (handle_flow_event(msg, fev_send, NULL) != pfs_failed) {
-        s->next_timeout = msg->timeout;
-
-        PCP_LOG_END(PCP_LOGLVL_DEBUG);
-        return pss_wait_ping_resp;
-    }
-
-    gettimeofday(&s->next_timeout, NULL);
-    PCP_LOG_END(PCP_LOGLVL_DEBUG);
-    return pss_set_not_working;
+    s->next_timeout.tv_sec = 0;
+    s->next_timeout.tv_usec = 0;
+    return pss_ping;
 }
 
 static pcp_server_state_e handle_wait_ping_resp_timeout(pcp_server_t *s) {

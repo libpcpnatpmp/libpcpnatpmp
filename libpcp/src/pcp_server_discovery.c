@@ -55,6 +55,7 @@
 
 static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
     struct in6_addr src_ip;
+    uint32_t src_scope_id = 0;
     const char *err = NULL;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
@@ -114,8 +115,8 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
               (void *)&((struct sockaddr_in6 *)&s->pcp_server_saddr)->sin6_addr,
               s->pcp_server_paddr, sizeof(s->pcp_server_paddr));
 
-    err =
-        findsaddr6((struct sockaddr_in6 *)&s->pcp_server_saddr, &src_ip, NULL);
+    err = findsaddr6((struct sockaddr_in6 *)&s->pcp_server_saddr, &src_ip,
+                     &src_scope_id);
     if (err) {
         PCP_LOG(PCP_LOGLVL_WARN,
                 "Error (%s) occurred while registering a new "
@@ -129,6 +130,10 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
     s->src_ip[1] = S6_ADDR32(&src_ip)[1];
     s->src_ip[2] = S6_ADDR32(&src_ip)[2];
     s->src_ip[3] = S6_ADDR32(&src_ip)[3];
+
+    if ((s->pcp_scope_id == 0) && (IN6_IS_ADDR_LINKLOCAL(&src_ip))) {
+        s->pcp_scope_id = src_scope_id;
+    }
 #endif // PCP_USE_IPV6_SOCKET
     s->server_state = pss_ping;
     s->next_timeout.tv_sec = 0;
