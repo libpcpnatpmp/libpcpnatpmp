@@ -36,6 +36,9 @@
 #include <string.h>
 #ifdef WIN32
 #include "pcp_win_defines.h"
+
+#include <mswsock.h>
+#include <ws2def.h>
 #else // WIN32
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -255,7 +258,7 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#else // WIN32
+#else  // WIN32
     flg = fcntl(s, F_GETFL, 0);
     if (fcntl(s, F_SETFL, flg | O_NONBLOCK)) {
         PCP_LOG(PCP_LOGLVL_ERR, "%s",
@@ -263,26 +266,6 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
         CLOSE(s);
         return PCP_INVALID_SOCKET;
     }
-#if defined(IP_PKTINFO) && defined(IPV6_RECVPKTINFO)
-    {
-        // Enable usage of IP_PKTINFO
-        int optval = 1;
-        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval)) <
-            0) {
-            PCP_LOG(PCP_LOGLVL_ERR, "%s",
-                    "Unable to set IP_PKTINFO option for socket.");
-            CLOSE(s);
-            return PCP_INVALID_SOCKET;
-        }
-        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, &optval,
-                       sizeof(optval)) < 0) {
-            PCP_LOG(PCP_LOGLVL_ERR, "%s",
-                    "Unable to set IPV6_RECVPKTINFO option for socket.");
-            CLOSE(s);
-            return PCP_INVALID_SOCKET;
-        }
-    }
-#endif // IP_PKTINFO && IPV6_RECVPKTINFO
 #endif //! WIN32
 #ifdef PCP_USE_IPV6_SOCKET
     flg = 0;
@@ -295,6 +278,36 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
         return PCP_INVALID_SOCKET;
     }
 #endif // PCP_USE_IPV6_SOCKET
+#if defined(IP_PKTINFO) || defined(IPV6_RECVPKTINFO) || defined(IPV6_PKTINFO)
+    {
+        int optval = 1;
+#if defined WIN32 && defined IPV6_PKTINFO
+        if (setsockopt(s, IPPROTO_IPV6, IPV6_PKTINFO, (char *)&optval,
+                       sizeof(optval)) < 0) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                    "Unable to set IPV6_PKTINFO option for socket.");
+            CLOSE(s);
+            return PCP_INVALID_SOCKET;
+        }
+#endif // WIN32 && IPV6_PKTINFO
+#ifdef IP_PKTINFO
+        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO, (char *)&optval,
+                       sizeof(optval)) < 0) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                    "Unable to set IP_PKTINFO option for socket.");
+        }
+#endif // IP_PKTINFO
+#ifdef IPV6_RECVPKTINFO
+        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&optval,
+                       sizeof(optval)) < 0) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                    "Unable to set IPV6_RECVPKTINFO option for socket.");
+            CLOSE(s);
+            return PCP_INVALID_SOCKET;
+        }
+#endif // IPV6_RECVPKTINFO
+    }
+#endif // IP_PKTINFO && IPV6_RECVPKTINFO
     while (bind(s, (struct sockaddr *)&sas, SA_LEN((struct sockaddr *)&sas)) ==
            PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_ADDRINUSE) {
@@ -314,6 +327,12 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
 #endif
 }
 
+#ifdef WIN32
+#define PCP_CMSG_DATA(msg) (WSA_CMSG_DATA(msg))
+#else // WIN32
+#define PCP_CMSG_DATA(msg) (CMSG_DATA(msg))
+#endif // WIN32
+
 static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
                                         int flags, struct sockaddr *src_addr,
                                         socklen_t *addrlen,
@@ -321,15 +340,13 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
     ssize_t ret = -1;
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
-#if defined(IPV6_PKTINFO) && defined(IP_PKTINFO) && !defined(WIN32)
-    // Buffer pre kontrolné správy
+#if defined(IPV6_PKTINFO) && defined(IP_PKTINFO)
     char control_buf[1024];
 
+#ifndef WIN32
     struct msghdr msg;
     struct iovec iov;
     struct cmsghdr *cmsg;
-    struct in_pktinfo *pktinfo;
-    struct in6_pktinfo *pktinfo6;
 
     iov.iov_base = buf;
     iov.iov_len = len;
@@ -342,36 +359,84 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
     msg.msg_control = control_buf;
     msg.msg_controllen = sizeof(control_buf);
 
-    // Prijatie správy s IP_PKTINFO
+    // Receive message with IP_PKTINFO
     ret = recvmsg(sock, &msg, 0);
 
-    // Processing control message
-    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
-         cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-        if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
-            pktinfo = (struct in_pktinfo *)CMSG_DATA(cmsg);
-            S6_ADDR32(&dst_addr->sin6_addr)[0] = 0;
-            S6_ADDR32(&dst_addr->sin6_addr)[1] = 0;
-            S6_ADDR32(&dst_addr->sin6_addr)[2] = htonl(0xFFFF);
-            S6_ADDR32(&dst_addr->sin6_addr)[3] = pktinfo->ipi_addr.s_addr;
-            dst_addr->sin6_scope_id = 0;
-            dst_addr->sin6_family = AF_INET6;
+#else // WIN32
+    WSAMSG msg;
+    WSABUF iov;
+    WSACMSGHDR *cmsg;
+    iov.buf = buf;
+    iov.len = len;
+
+    memset(&msg, 0, sizeof(msg));
+    msg.name = (struct sockaddr *)src_addr;
+    msg.namelen = addrlen ? *addrlen : 0;
+    msg.lpBuffers = &iov;
+    msg.dwBufferCount = 1;
+    msg.Control.buf = control_buf;
+    msg.Control.len = sizeof(control_buf);
+    msg.dwFlags = 0;
+    memset(control_buf, 0, sizeof(control_buf));
+    // Get WSARecvMsg function pointer
+    LPFN_WSARECVMSG WSARecvMsg;
+    GUID guid = WSAID_WSARECVMSG;
+    DWORD bytesReturned;
+    if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid),
+                 &WSARecvMsg, sizeof(WSARecvMsg), &bytesReturned, NULL,
+                 NULL) == SOCKET_ERROR) {
+        perror("WSAIoctl failed");
+        return 1;
+    }
+
+    DWORD bytesReceived;
+    if (WSARecvMsg(sock, &msg, &bytesReceived, NULL, NULL) == SOCKET_ERROR) {
+        ret = -1;
+    } else {
+#ifdef _WIN32
+        if (bytesReceived > INT32_MAX) {
+            ret = -1; // Handle overflow error
+        } else {
+            ret = (ssize_t)bytesReceived;
         }
-        if (cmsg->cmsg_level == IPPROTO_IPV6 &&
-            cmsg->cmsg_type == IPV6_PKTINFO) {
-            pktinfo6 = (struct in6_pktinfo *)CMSG_DATA(cmsg);
-            IPV6_ADDR_COPY(&dst_addr->sin6_addr, &pktinfo6->ipi6_addr);
-            dst_addr->sin6_family = AF_INET6;
-            if (IN6_IS_ADDR_LINKLOCAL(&pktinfo6->ipi6_addr)) {
-                dst_addr->sin6_scope_id = pktinfo6->ipi6_ifindex;
-            } else {
+#else
+        ret = bytesReceived;
+#endif
+    }
+#endif // WIN32
+
+    // Processing control message
+    if (ret > 0) {
+        for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+             cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+            if (cmsg->cmsg_level == IPPROTO_IP &&
+                cmsg->cmsg_type == IP_PKTINFO) {
+                struct in_pktinfo *pktinfo =
+                    (struct in_pktinfo *)PCP_CMSG_DATA(cmsg);
+                S6_ADDR32(&dst_addr->sin6_addr)[0] = 0;
+                S6_ADDR32(&dst_addr->sin6_addr)[1] = 0;
+                S6_ADDR32(&dst_addr->sin6_addr)[2] = htonl(0xFFFF);
+                S6_ADDR32(&dst_addr->sin6_addr)[3] = pktinfo->ipi_addr.s_addr;
                 dst_addr->sin6_scope_id = 0;
+                dst_addr->sin6_family = AF_INET6;
+            }
+            if (cmsg->cmsg_level == IPPROTO_IPV6 &&
+                cmsg->cmsg_type == IPV6_PKTINFO) {
+                struct in6_pktinfo *pktinfo6 =
+                    (struct in6_pktinfo *)PCP_CMSG_DATA(cmsg);
+                IPV6_ADDR_COPY(&dst_addr->sin6_addr, &pktinfo6->ipi6_addr);
+                dst_addr->sin6_family = AF_INET6;
+                if (IN6_IS_ADDR_LINKLOCAL(&pktinfo6->ipi6_addr)) {
+                    dst_addr->sin6_scope_id = pktinfo6->ipi6_ifindex;
+                } else {
+                    dst_addr->sin6_scope_id = 0;
+                }
             }
         }
     }
-#else  // IPV6_PKTINFO && IP_PKTINFO && !WIN32
+#else  // IPV6_PKTINFO && IP_PKTINFO
     ret = recvfrom(sock, buf, len, flags, src_addr, addrlen);
-#endif // IPV6_PKTINFO && IP_PKTINFO && !WIN32
+#endif // IPV6_PKTINFO && IP_PKTINFO
     if (ret == PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
             ret = PCP_ERR_WOULDBLOCK;
@@ -393,11 +458,13 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
 
-#if defined(IPV6_PKTINFO) && !defined(WIN32)
+#if defined(IPV6_PKTINFO)
     if (src_addr) {
+        struct in6_pktinfo ipi6 = {0};
+
+#ifndef WIN32
+        uint8_t c[CMSG_SPACE(sizeof(struct in6_pktinfo))] = {0};
         struct iovec iov;
-        struct in6_pktinfo ipi6;
-        uint8_t c[CMSG_SPACE(sizeof(ipi6))];
         struct msghdr msg;
         struct cmsghdr *cmsg;
 
@@ -418,20 +485,75 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         msg.msg_name = (void *)dest_addr;
         msg.msg_namelen = addrlen;
         ret = sendmsg(sock, &msg, flags);
-    } else {
-#endif /* IPV6_PKTINFO  && !WIN32*/
-        ret = sendto(sock, buf, len, 0, dest_addr, addrlen);
-#if defined(IPV6_PKTINFO) && !defined(WIN32)
-    }
-#endif /* IPV6_PKTINFO && !WIN32*/
+#else  // WIN32
+        WSABUF wsaBuf;
+        wsaBuf.buf = buf;
+        wsaBuf.len = len;
+        uint8_t c[WSA_CMSG_SPACE(sizeof(struct in6_pktinfo))] = {0};
 
-    if ((ret == PCP_SOCKET_ERROR) || (ret != (ssize_t)len)) {
-        if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
-            ret = PCP_ERR_WOULDBLOCK;
+        WSAMSG wsaMsg;
+        memset(&wsaMsg, 0, sizeof(wsaMsg));
+        wsaMsg.name = (struct sockaddr *)dest_addr;
+        wsaMsg.namelen = addrlen;
+        wsaMsg.lpBuffers = &wsaBuf;
+        wsaMsg.dwBufferCount = 1;
+        wsaMsg.Control.buf = c;
+
+        // Set the source address inside the control message
+        if (IN6_IS_ADDR_V4MAPPED(&src_addr->sin6_addr)) {
+            wsaMsg.Control.len = WSA_CMSG_SPACE(sizeof(struct in_pktinfo));
+            struct cmsghdr *cmsg = WSA_CMSG_FIRSTHDR(&wsaMsg);
+            cmsg->cmsg_level = IPPROTO_IP;
+            cmsg->cmsg_type = IP_PKTINFO;
+            cmsg->cmsg_len = WSA_CMSG_LEN(sizeof(struct in_pktinfo));
+            struct in_pktinfo *pktinfo =
+                (struct in_pktinfo *)WSA_CMSG_DATA(cmsg);
+            pktinfo->ipi_addr.s_addr = S6_ADDR32(&src_addr->sin6_addr)[3];
         } else {
-            ret = PCP_ERR_SEND_FAILED;
+            wsaMsg.Control.len = WSA_CMSG_SPACE(sizeof(struct in6_pktinfo));
+            struct cmsghdr *cmsg = WSA_CMSG_FIRSTHDR(&wsaMsg);
+            cmsg->cmsg_level = IPPROTO_IPV6;
+            cmsg->cmsg_type = IPV6_PKTINFO;
+            cmsg->cmsg_len = WSA_CMSG_LEN(sizeof(struct in6_pktinfo));
+            struct in6_pktinfo *pktinfo =
+                (struct in6_pktinfo *)WSA_CMSG_DATA(cmsg);
+            IPV6_ADDR_COPY(&pktinfo->ipi6_addr, &src_addr->sin6_addr);
+            pktinfo->ipi6_ifindex = src_addr->sin6_scope_id;
         }
-    }
+
+        LPFN_WSARECVMSG WSARecvMsg;
+        GUID WSARecvMsg_GUID = WSAID_WSARECVMSG;
+        DWORD dwBytesReturned;
+
+        if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &WSARecvMsg_GUID,
+                     sizeof(GUID), &WSARecvMsg, sizeof(WSARecvMsg),
+                     &dwBytesReturned, NULL, NULL) == SOCKET_ERROR) {
+            PCP_LOG(PCP_LOGLVL_PERR, ("WSAIoctl failed"));
+            return 1;
+        }
+
+        // Send the packet
+        DWORD bytesSent = 0;
+        if (WSASendMsg(sock, &wsaMsg, 0, &bytesSent, NULL, NULL) ==
+            SOCKET_ERROR) {
+            PCP_LOG(PCP_LOGLVL_PERR, "WSASendMsg failed: %d",
+                    WSAGetLastError());
+        } else {
+            ret = bytesSent;
+        }
+#endif // WIN32
+    } else
+#else  // IPV6_PKTINFO
+    ret = sendto(sock, buf, len, 0, dest_addr, addrlen);
+#endif /* IPV6_PKTINFO */
+
+        if ((ret == PCP_SOCKET_ERROR) || (ret != (ssize_t)len)) {
+            if (pcp_get_error() == PCP_ERR_WOULDBLOCK) {
+                ret = PCP_ERR_WOULDBLOCK;
+            } else {
+                ret = PCP_ERR_SEND_FAILED;
+            }
+        }
 #endif
     return ret;
 }
