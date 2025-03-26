@@ -341,7 +341,7 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
 #if defined(IPV6_PKTINFO) && defined(IP_PKTINFO)
-    char control_buf[1024];
+    char control_buf[1024] = {0};
 
 #ifndef WIN32
     struct msghdr msg;
@@ -377,7 +377,6 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
     msg.Control.buf = control_buf;
     msg.Control.len = sizeof(control_buf);
     msg.dwFlags = 0;
-    memset(control_buf, 0, sizeof(control_buf));
     // Get WSARecvMsg function pointer
     LPFN_WSARECVMSG WSARecvMsg;
     GUID guid = WSAID_WSARECVMSG;
