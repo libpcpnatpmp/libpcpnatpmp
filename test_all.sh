@@ -21,7 +21,7 @@ return 0
 
 # BIN_PATH describes the path to scripts required by executables.
 
-# this script is expected to be in /libpcp/tests, else you have to change $BIN_PATH
+# this script is expected to be in /lib/tests, else you have to change $BIN_PATH
 # variable, which directs script to executables.
 # paths to scripts for pcp-app and pcp-server must be changed manually
 
@@ -90,7 +90,7 @@ Get_Status $? "test_pcp_msg               "
 $PATH_SCRIPT/test_server_reping.sh
 Get_Status $? "test_server_reping         "
 
-$PATH_SCRIPT/test_pcp_app.sh
+$PATH_SCRIPT/test_pcp_cli_client.sh
 Get_Status $? "test_pcp_app               "
 
 $PATH_SCRIPT/test_pcp_server.sh

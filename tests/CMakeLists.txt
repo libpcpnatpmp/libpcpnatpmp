@@ -1,6 +1,6 @@
-include_directories (../libpcp ../libpcp/src ../libpcp/src/net)
+include_directories (../lib ../lib/src ../lib/src/net)
 if (WIN32)
-    include_directories (../libpcp/src/windows ../win_utils)
+    include_directories (../lib/src/windows ../win_utils)
 endif ()
 
 add_executable (test_flow_notify test_flow_notify.c)

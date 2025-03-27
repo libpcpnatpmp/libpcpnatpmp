@@ -16,7 +16,8 @@
 #include "default_config.h"
 #endif
 
-#include "pcp.h"
+#include "pcpnatpmp.h"
+
 #include "pcp_socket.h"
 #include "pcp_utils.h"
 #include "test_macro.h"
@@ -31,7 +32,7 @@ int main(void) {
     PD_SOCKET_STARTUP();
     ctx = pcp_init(0, NULL);
 #ifndef PCP_DISABLE_NATPMP
-    { // TEST NATPMP - parsing
+    { // TEST NAT-PMP - parsing
         nat_pmp_announce_resp_t natpmp_a;
         nat_pmp_map_resp_t natpmp_mt;
         nat_pmp_map_resp_t natpmp_mu;

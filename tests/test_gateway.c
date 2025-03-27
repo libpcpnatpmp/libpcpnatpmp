@@ -17,7 +17,7 @@
 #endif
 
 #include "gateway.h"
-#include "pcp.h"
+#include "pcpnatpmp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef WIN32

@@ -1,4 +1,4 @@
-AC_INIT([pcp-client],[2.0],[aeon@cisco.com])
+AC_INIT([pcpnatpmp-client],[2.0],[aeon@cisco.com])
 AC_CANONICAL_TARGET
 AC_PREREQ([2.71])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign color-tests subdir-objects])
@@ -8,10 +8,10 @@ LT_INIT
 AC_PROG_CC
 AC_CONFIG_FILES([
  Makefile
- libpcp/Makefile
- libpcp/libpcp-client.pc
- pcp_server/Makefile
- pcp_app/Makefile
+ lib/Makefile
+ lib/libpcpnatpmp.pc
+ test-server/Makefile
+ cli-client/Makefile
  tests/Makefile
 ])
 AC_CONFIG_HEADERS([config.h])
@@ -113,25 +113,25 @@ AC_ARG_ENABLE([gcov],
     [enable_gcov=no])
 AM_CONDITIONAL([GCOV],[test '!' "$enable_gcov" = no])
 
-AC_ARG_ENABLE([app],
-              [AS_HELP_STRING([--enable-app],[build command-line client app])],
-              [build_app=${enableval}],
-              [build_app="yes"])
-AM_CONDITIONAL([BUILD_APP],[test "x$build_app" = "xyes"])
+AC_ARG_ENABLE([cli-client],
+              [AS_HELP_STRING([--enable-cli-client],[build command-line interface client])],
+              [build_cli_client=${enableval}],
+              [build_cli_client="yes"])
+AM_CONDITIONAL([BUILD_CLI_CLIENT],[test "x$build_cli_client" = "xyes"])
 
 AC_ARG_ENABLE([server],
-              [AS_HELP_STRING([--enable-server],[build test server app])],
+              [AS_HELP_STRING([--enable-server],[build test server])],
               [build_server=${enableval}],
               [build_server="yes"])
 AM_CONDITIONAL([BUILD_SERVER],[test "x$build_server" = "xyes"])
 
 AC_ARG_ENABLE([natpmp],
-              [AS_HELP_STRING([--disable-natpmp],[disable NATPMP support])],
+              [AS_HELP_STRING([--disable-natpmp],[disable NAT-PMP support])],
               [enable_natpmp=${enableval}],
               [enable_natpmp="yes"])
 
 if test "x$enable_natpmp" != "xyes" ; then
-AC_DEFINE([PCP_DISABLE_NATPMP_SUPPORT],1,[disable NATPMP support])
+AC_DEFINE([PCP_DISABLE_NATPMP_SUPPORT],1,[disable NAT-PMP support])
 AC_DEFINE([PCP_MIN_SUPPORTED_VERSION],1,[Minimal PCP version to use])
 else
 AC_DEFINE([PCP_MIN_SUPPORTED_VERSION],0,[Minimal PCP version to use])

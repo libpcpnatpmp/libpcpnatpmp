@@ -8,7 +8,7 @@ mkdir test_coverage.tmp
 cd test_coverage.tmp
 CPPFLAGS="-DNDEBUG -DPCP_MAX_LOG_LEVEL=5" CFLAGS="-O0 -g" ../configure --enable-gcov
 make check
-rm pcp_app/pcp-pcp_app.gcda
+rm cli-client/pcp-pcp_app.gcda
 lcov -c --directory . --output-file info && genhtml -o report/ info && cd .. && rm -rf test_coverage && mv test_coverage.tmp test_coverage
 
 URL=test_coverage/report/index.html

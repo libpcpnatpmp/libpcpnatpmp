@@ -27,7 +27,8 @@
 #include <sys/socket.h>
 #endif
 
-#include "pcp.h"
+#include "pcpnatpmp.h"
+
 #include "pcp_socket.h"
 #include "test_macro.h"
 #include "unp.h"

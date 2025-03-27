@@ -26,8 +26,8 @@ cmake/
 *.l[oa]
 *.pc
 libtool
-pcp_app/pcp
-pcp_server/pcp-server
+cli-client/pcpnatpmpc
+test-server/pcp-server
 
 
 ### Python

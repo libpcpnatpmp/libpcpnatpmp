@@ -6,8 +6,8 @@ function echo_exit {
     exit 1
 }
 
-echo "########################################"
-echo "####        Test pcp server app    ####"
+echo "#######################################"
+echo "####     Test pcp mock server      ####"
 echo "#######################################"
 
 killall pcp-server &>/dev/null
@@ -61,7 +61,7 @@ killall pcp-server &>/dev/null && echo_exit "Failed setting pcp-server version #
 # Tests assumes the log file is being overwritten (current implementation)
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -v 1 -s 127.0.0.1 -i :1234 &>/dev/null &
+pcpnatpmpc -v 1 -s 127.0.0.1 -i :1234 &>/dev/null &
 sleep 1.6
 grep -q "PCP protocol VERSION 1." test.log || echo_exit "Failed log file test #1.1"
 grep -q "MAP protocol:" test.log || echo_exit "Failed log ile test #1.2"
@@ -69,7 +69,7 @@ grep -q "MAP protocol:" test.log || echo_exit "Failed log ile test #1.2"
 killall pcp-server &>/dev/null
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -v 2 --server 127.0.0.1 --internal :1234 &>/dev/null &
+pcpnatpmpc -v 2 --server 127.0.0.1 --internal :1234 &>/dev/null &
 sleep 1.6
 grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #2.1"
 grep -q "MAP protocol:" test.log || echo_exit "Failed log ile test #2.2"
@@ -77,7 +77,7 @@ grep -q "MAP protocol:" test.log || echo_exit "Failed log ile test #2.2"
 killall pcp-server &>/dev/null
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -v 1 --server 127.0.0.1 -i :1234 -p 127.0.0.1:8888 &>/dev/null &
+pcpnatpmpc -v 1 --server 127.0.0.1 -i :1234 -p 127.0.0.1:8888 &>/dev/null &
 sleep 1.6
 grep -q "PCP protocol VERSION 1." test.log || echo_exit "Failed log file test #3.1"
 grep -q "PEER Opcode specific information." test.log || echo_exit "Failed log ile test #3.2"
@@ -85,7 +85,7 @@ grep -q "PEER Opcode specific information." test.log || echo_exit "Failed log il
 killall pcp-server &>/dev/null
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -s 127.0.0.1 -i :1234 -p 127.0.0.1:8888 &>/dev/null &
+pcpnatpmpc -s 127.0.0.1 -i :1234 -p 127.0.0.1:8888 &>/dev/null &
 sleep 1.6
 grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #4.1"
 grep -q "PEER Opcode specific information." test.log || echo_exit "Failed log ile test #4.2"
@@ -94,7 +94,7 @@ killall pcp-server &>/dev/null
 # Options tests
 #pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 #sleep 0.1
-#pcp -s 127.0.0.1 -i :1234 -p 127.0.0.1:8888 --user-id user@example.com --location --device-id &>/dev/null &
+#pcpnatpmpc -s 127.0.0.1 -i :1234 -p 127.0.0.1:8888 --user-id user@example.com --location --device-id &>/dev/null &
 #sleep 1.6
 #grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #5.1"
 #grep -q "PEER Opcode specific information." test.log || echo_exit "Failed log ile test #5.2"
@@ -107,7 +107,7 @@ killall pcp-server &>/dev/null
 
 #pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 #sleep 0.1
-#pcp -s 127.0.0.1 -i :1234 --metadata-id 96 --metadata-value "testing" &>/dev/null &
+#pcpnatpmpc -s 127.0.0.1 -i :1234 --metadata-id 96 --metadata-value "testing" &>/dev/null &
 #sleep 1.6
 #grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #6.1"
 #grep -q "MAP" test.log || echo_exit "Failed log ile test #6"
@@ -118,7 +118,7 @@ killall pcp-server &>/dev/null
 
 #pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 #sleep 0.1
-#pcp -s 127.0.0.1 -i :1234 --dscp-up 10 --dscp-down 10 &>/dev/null &
+#pcpnatpmpc -s 127.0.0.1 -i :1234 --dscp-up 10 --dscp-down 10 &>/dev/null &
 #sleep 1.6
 #grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #7.1"
 #grep -q "MAP" test.log || echo_exit "Failed log file test #7.2"
@@ -129,7 +129,7 @@ killall pcp-server &>/dev/null
 
 #pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 #sleep 0.1
-#pcp -s 127.0.0.1 -J 0 -E 1 -L 2 -A Webex &>/dev/null &
+#pcpnatpmpc -s 127.0.0.1 -J 0 -E 1 -L 2 -A Webex &>/dev/null &
 #sleep 1.6
 #grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #8.1"
 #grep -q "SADSCP Opcode specific information." test.log || echo_exit "Failed log file test #8.2"
@@ -141,7 +141,7 @@ killall pcp-server &>/dev/null
 
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -s 127.0.0.1 -i :1234 -P &>/dev/null
+pcpnatpmpc -s 127.0.0.1 -i :1234 -P &>/dev/null
 sleep 1.6
 grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #9.1"
 grep -q "MAP" test.log || echo_exit "Failed log file test #9.2"
@@ -149,7 +149,7 @@ grep -q "OPTION: 	 Prefer fail" test.log || echo_exit "Failed log file test #9.3
 
 pcp-server --log-file test.log --timeout 1000 &>/dev/null &
 sleep 0.1
-pcp -d -s 127.0.0.1 -i :1234 -F [8.8.8.8/12]:4444 &>/dev/null
+pcpnatpmpc -d -s 127.0.0.1 -i :1234 -F [8.8.8.8/12]:4444 &>/dev/null
 sleep 1.6
 grep -q "PCP protocol VERSION 2." test.log || echo_exit "Failed log file test #10.1"
 grep -q "MAP" test.log || echo_exit "Failed log file test #10.2"
