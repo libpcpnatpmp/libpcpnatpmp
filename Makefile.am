@@ -1,13 +1,13 @@
 ACLOCAL_AMFLAGS = -I m4
-if BUILD_APP
-  APP_DIR = pcp_app
+if BUILD_CLI_CLIENT
+  APP_DIR = cli-client
 endif
 
 if BUILD_SERVER
-  SERVER_DIR = pcp_server
+  SERVER_DIR = test-server
 endif
 
-PCP_CPPFLAGS = -I$(top_srcdir)/libpcp/include -I$(top_srcdir)/libpcp/src/net -I$(top_srcdir)/libpcp/src
+PCP_CPPFLAGS = -I$(top_srcdir)/lib/include -I$(top_srcdir)/lib/src/net -I$(top_srcdir)/lib/src
 PCP_CFLAGS = -Wall -Werror -Wno-error=strict-aliasing
 GCOVLIB =
 
@@ -31,7 +31,7 @@ export GCOVLIB
 export PCP_CFLAGS
 export PCP_CPPFLAGS
 
-SUBDIRS = libpcp \
+SUBDIRS = lib \
           tests \
           $(APP_DIR) \
           $(SERVER_DIR)
@@ -45,14 +45,14 @@ EXTRA_DIST = tests/test_flow_notify.sh \
              tests/test_get_dscp.sh \
              tests/test_lifetime_renewal.sh \
              autogen.sh \
-             tests/test_pcp_app.sh \
+             tests/test_pcp_cli_client.sh \
              tests/test_pcp_server.sh \
              tests/test_flow_md.sh \
              tests/test_server_reping.sh \
              INSTALL.md \
              README.md \
-             pcp_app/README.md \
-             pcp_server/README.md \
+             cli-client/README.md \
+             test-server/README.md \
              scapy/README.md \
              COPYING
 
@@ -60,7 +60,7 @@ if PCP_USE_IPV6_SOCKET
 DPCP_USE_IPV6_SOCKET=1
 endif
 
-TESTS_ENVIRONMENT = PATH=pcp_app/:pcp_server/:libpcp/:tests/:$(PATH)\
+TESTS_ENVIRONMENT = PATH=cli-client/:test-server/:lib/:tests/:$(PATH)\
                     PCP_USE_IPV6_SOCKET=$(DPCP_USE_IPV6_SOCKET)
 
 if PCP_EXPERIMENTAL
@@ -86,7 +86,7 @@ TESTS = tests/test_flow_notify.sh \
         tests/test_ping_gws \
         tests/test_pcp_client_db \
         tests/test_pcp_api \
-        tests/test_pcp_app.sh \
+        tests/test_pcp_cli_client.sh \
         tests/test_pcp_server.sh \
         tests/test_sock_ntop \
         tests/test_pcp_logger \

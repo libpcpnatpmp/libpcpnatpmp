@@ -3,8 +3,8 @@
 rm -rf autom4te.cache
 rm -f aclocal.m4 ltmain.sh
 
-autoconf_minor_version=`autoconf --version | egrep -o "^autoconf.* ([0-9]+\.[0-9]+)" | egrep -o "([0-9]+)$"`
-autoconf_major_version=`autoconf --version | egrep -o "^autoconf.* ([0-9]+\.[0-9]+)" | egrep -o " ([0-9]+)"`
+autoconf_minor_version=`autoconf --version | grep -Eo "^autoconf.* ([0-9]+\.[0-9]+)" | grep -Eo "([0-9]+)$"`
+autoconf_major_version=`autoconf --version | grep -Eo "^autoconf.* ([0-9]+\.[0-9]+)" | grep -Eo " ([0-9]+)"`
 
 if ! [ $autoconf_minor_version -gt "61" -a $autoconf_major_version -ge "2" ]; then
 [ -f configure.ac.orig ] || mv configure.ac configure.ac.orig

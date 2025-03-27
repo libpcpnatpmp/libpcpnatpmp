@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: configure
-      run: ./autogen.sh && ./configure --enable-app --enable-server
+      run: ./autogen.sh && ./configure
     - name: make
       run: make
     - name: make check

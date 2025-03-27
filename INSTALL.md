@@ -1,25 +1,25 @@
 Installation Instructions
 =========================
 
-Basic Installation
+Basic installation
 ------------------
 
-    $ ./autogen.sh
-    $ ./configure
-    $ make
-    $ sudo make install
+    ./autogen.sh
+    ./configure
+    make
+    sudo make install
 
 Configuration options
 ---------------------
 
-For all available configuration option check ./configure -h output.
+For all available configuration option check `./configure -h` output.
 
-### Examples: ###
+### Examples ###
 
 *Set compile time log level:*
 
-    $ ./configure CPPFLAGS="-DPCP_MAX_LOG_LEVEL=5"
+    ./configure CPPFLAGS="-DPCP_MAX_LOG_LEVEL=5"
 
 *Compile library only:*
 
-    $ ./configure --disable-server --disable-app
+    ./configure --disable-server --disable-cli-client
