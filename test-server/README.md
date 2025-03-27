@@ -1,13 +1,13 @@
-PCP Server
-==========
+PCP test server
+===============
 
 Simple mock PCP server for testing purposes. It doesn't create any real
 mappings, it just displays the contents of received PCP message and returns PCP
 response back to the client.
 
-The pcp_server CLI help:
+The pcp-server CLI help:
 
-    $ ./pcp_server -h
+    ./pcp-server -h
 
     Usage:
     -h, --help          Display this help
@@ -30,13 +30,13 @@ The pcp_server CLI help:
     --log-file          Log Requests to file
 
 
-Running pcp_server
+Running pcp-server
 ------------------
 
-Running pcp_server executable without any arguments will start PCP server
+Running pcp-server executable without any arguments will start PCP server
 with default settings.
 
-    $ ./pcp_server
+    ./pcp-server
 
 Examples
 --------
@@ -44,12 +44,12 @@ Examples
 Following command will return UNSUPP_VERSION result code to every request it
 receives:
 
-    $ ./pcp_server –r 1
+    ./pcp-server –r 1
 
 Following command will set version to 1 then wait for 5 seconds or receive
 5 messages before it ends, whichever happens first:
 
-    $ ./pcp_server –v 1 --timeout 5000 --ear 5
+    ./pcp-server –v 1 --timeout 5000 --ear 5
 
 --app-bit
 This flag sets the bit in SADSCP opcode response indicating , that the
@@ -61,4 +61,3 @@ Sets DSCP value to be returned in the response to any SADSCP request.
 --log-file
 Output of the pcp-server is not only printed to stdout, but also logged into
 file. The file is being overwritten every time new message arrives.
-

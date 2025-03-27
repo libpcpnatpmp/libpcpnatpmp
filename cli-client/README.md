@@ -1,9 +1,10 @@
-PCP CLI app
-===========
+PCP/NAT-PMP CLI client
+======================
 
-The PCP client CLI app supports sending MAP, PEER and SADSCP Opcodes (for more
-information run pcp -h). Only one type of request can be sent per CLI invocation
-and the type of message is determined following way:
+The command-line interface client app supports sending MAP, PEER and
+SADSCP Opcodes (for more information run pcpnatpmpc -h). Only one type of
+request can be sent per CLI invocation and the type of message is determined
+following way:
 
 1.  The MAP message is sent if you provide at least
     internal port of the flow with option -i --internal.
@@ -14,7 +15,7 @@ and the type of message is determined following way:
 3.  By providing jitter/loss/delay tolerances via CLI options
     the SADSCP opcode request will be created and sent.
 
-### Basic options: ###
+### Basic options ###
 
     -e, --suggested-external
         Provide suggested external IP address and port in the PCP request.
@@ -37,19 +38,18 @@ and the type of message is determined following way:
     -F, --filter
         Adds filter option to the PCP MAP message.
 
-Examples:
----------
+Examples
+--------
 
   *Send MAP command for TCP port 1234 bound to all internal addresses with
   lifetime set to 1 hour:*
 
-    pcp -i :1234 -l 3600
+    pcpnatpmpc -i :1234 -l 3600
 
   *Send MAP command for TCP port 1234 only to PCP server at 10.0.0.1:*
 
-    pcp -d -s 10.0.0.1 -i :1234
+    pcpnatpmpc -d -s 10.0.0.1 -i :1234
 
   *Send PEER for 5-tuple(source: 10.0.0.2:1234, dest 8.8.8.8:9, protocol UDP):*
 
-    pcp -i 10.0.0.2:1234 -p 8.8.8.8:9 -u
-
+    pcpnatpmpc -i 10.0.0.2:1234 -p 8.8.8.8:9 -u

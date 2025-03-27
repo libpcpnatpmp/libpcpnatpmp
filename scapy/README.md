@@ -1,15 +1,15 @@
-PCP Extension for Scapy
+PCP extension for Scapy
 =======================
 
 The scapy_pcp.py defines new PCP layer to be used with Scapy.
 You can find Scapy documentation on the following address
-http://www.secdev.org/projects/scapy/doc/index.html
+https://scapy.readthedocs.io/en/latest/
 
 Quick intro
 -----------
 
 ```bash
-~$ sudo ./scapy_pcp.py
+sudo ./scapy_pcp.py
 ```
 
 This will start interactive mode in which PCP protocol extensions will be
