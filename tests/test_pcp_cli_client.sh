@@ -49,7 +49,7 @@ pcpnatpmpc --server 127.0.0.1 -f --disable-autodiscovery --pcp-version 1 --peer 
 
 [ $? -eq 3 ] || echo_exit "Failed in recieved short lifetime error"
 
-killall pcp_server &>/dev/null && sleep 0.1
+killall pcp-server &>/dev/null && sleep 0.1
 
 pcp-server --ear 1 -r 3 &>/dev/null &
 sleep 0.1
@@ -58,7 +58,7 @@ pcpnatpmpc --server 127.0.0.1 -d --pcp-version 1 --peer 127.0.0.1:1111 --fast-re
 
 [ $? -eq 4 ] || echo_exit "Failed in recieved error test"
 
-killall pcp_server &>/dev/null && sleep 0.1
+killall pcp-server &>/dev/null && sleep 0.1
 
 pcp-server --ear 1 -r 8 &>/dev/null &
 
@@ -67,7 +67,7 @@ pcpnatpmpc --server 127.0.0.1 -f --pcp-version 1 --internal=:1234 &>/dev/null
 
 [ $? -eq 2 -o $? -eq 3 -o $? -eq 4 ] || echo_exit "Failed in partial short lifetime error test."
 
-killall pcp_server &>/dev/null && sleep 0.1
+killall pcp-server &>/dev/null && sleep 0.1
 
 pcp-server --ear 1 -r 3 &>/dev/null &
 
@@ -76,7 +76,7 @@ pcpnatpmpc --server 127.0.0.1 --pcp-version 1 --fast-return -i :1234 &>/dev/null
 
 [ $? -eq 2 ] || echo_exit "Failed in partial error test."
 
-killall pcp_server 2>/dev/null &>/dev/null && sleep 0.1
+killall pcp-server 2>/dev/null &>/dev/null && sleep 0.1
 
 pcp-server --ear 1 &>/dev/null &
 
