@@ -33,7 +33,7 @@ from scapy.layers.inet6 import IP6Field
 
 class Dict2Struct(object):
     def __init__(self, entries):
-        entries = dict((v.replace(' ', '_').upper(), k) for k, v in entries.iteritems())
+        entries = dict((v.replace(' ', '_').upper(), k) for k, v in entries.items())
         self.__dict__.update(entries)
 
 
