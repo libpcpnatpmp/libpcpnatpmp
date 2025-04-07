@@ -23,12 +23,12 @@ return 0
 
 # this script is expected to be in /lib/tests, else you have to change $BIN_PATH
 # variable, which directs script to executables.
-# paths to scripts for pcp-app and pcp-server must be changed manually
+# paths to scripts for pcpnatpmpc and pcp-server must be changed manually
 
 OS=$(uname)
 CURRENT_DIR=$(pwd)
 case "$OS" in
-	Linux) BIN_PATH=$CURRENT_DIR/pcp_app:$CURRENT_DIR/pcp_server:$CURRENT_DIR/tests ;;
+	Linux) BIN_PATH=$CURRENT_DIR/cli-client:$CURRENT_DIR/test-server:$CURRENT_DIR/tests ;;
 	*) BIN_PATH=$CURRENT_DIR/build/bin/Debug ;;
 esac
 PATH_SCRIPT=tests
@@ -91,7 +91,7 @@ $PATH_SCRIPT/test_server_reping.sh
 Get_Status $? "test_server_reping         "
 
 $PATH_SCRIPT/test_pcp_cli_client.sh
-Get_Status $? "test_pcp_app               "
+Get_Status $? "test_pcp_cli_client        "
 
 $PATH_SCRIPT/test_pcp_server.sh
 Get_Status $? "test_pcp_server            "
