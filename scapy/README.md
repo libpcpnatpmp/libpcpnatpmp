@@ -1,7 +1,7 @@
 PCP extension for Scapy
 =======================
 
-The scapy_pcp.py defines new PCP layer to be used with Scapy.
+The `scapy_pcp.py` file defines new PCP layer to be used with Scapy.
 You can find Scapy documentation on the following address
 https://scapy.readthedocs.io/en/latest/
 
@@ -68,7 +68,7 @@ list of fields that you can edit in PCP for various opcodes:
       |     peer_ip= ::ffff:127.0.0.1
 ```
 
-To see fields that can be set in PCP options you can use::
+To see fields that can be set in PCP options you can use:
 
 ```python
 >>> (PCPOption()/PCPOptionThirdParty()).show()
@@ -78,7 +78,7 @@ To see fields that can be set in PCP options you can use::
 
 You can use similar syntax to check the fields in other layers as well.
 
-For example of IP or UDP layer::
+For example of IP or UDP layer:
 
 ```python
 >>> ls(IP())
@@ -127,7 +127,7 @@ You can then use resp_pkt to examine the response packet.
 The return of `sr()` is little more complicated as it can send and receive
 multiple packets. It returns two lists of packets, answered and unanswered.
 To iterate over received pakcets in answered list, one would use something
-similar to following code snippet::
+similar to following code snippet:
 
 ```python
 ans,unans = sr(d)

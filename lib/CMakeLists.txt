@@ -17,7 +17,7 @@ if (WIN32)
     )
 endif ()
 
-# header files for building pcp library
+# header files for building PCP/NAT-PMP client library
 set (LIBPCP_INC_FILES
     include/pcpnatpmp.h
     src/pcp_client_db.h

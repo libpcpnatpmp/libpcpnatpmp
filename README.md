@@ -11,7 +11,8 @@ NAT mapping or ask router for specific flow treatment).
 Supported platforms are 
 Linux, Microsoft Windows (Vista and later) and macOS.
 
-### Components ###
+Components
+----------
 
   - [lib](lib)                 - Client library
   - [cli-client](cli-client)   - Command-line interface client
