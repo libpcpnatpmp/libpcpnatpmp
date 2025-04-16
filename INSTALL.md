@@ -14,12 +14,19 @@ Configuration options
 
 For all available configuration option check `./configure -h` output.
 
-### Examples ###
+Examples
+--------
 
-*Set compile time log level:*
+Set compile time log level:
 
     ./configure CPPFLAGS="-DPCP_MAX_LOG_LEVEL=5"
 
-*Compile library only:*
+Compile library only:
 
     ./configure --disable-server --disable-cli-client
+
+Build with CMake
+----------------
+
+    cmake -B build
+    cmake --build build

@@ -668,6 +668,7 @@ static int execPCPServer(const char *serverPort, const char *serverAddress,
                                  &tod)) { // LCOV_EXCL_START
                 end_time.tv_sec = 0;
                 end_time.tv_usec = 0;
+                // LCOV_EXCL_STOP
             }
 
             SET_PI_TIMEOUT(pi_timeout, end_time);

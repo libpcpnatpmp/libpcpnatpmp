@@ -5,7 +5,8 @@ Simple mock PCP server for testing purposes. It doesn't create any real
 mappings, it just displays the contents of received PCP message and returns PCP
 response back to the client.
 
-The pcp-server CLI help:
+CLI options/help
+----------------
 
     ./pcp-server -h
 

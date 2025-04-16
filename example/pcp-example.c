@@ -1,3 +1,7 @@
+#ifndef WIN32
+#include <arpa/inet.h>
+#include <unistd.h>
+#endif
 #include <pcpnatpmp.h>
 #include <stdio.h>
 #include <string.h>
