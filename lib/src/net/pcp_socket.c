@@ -460,9 +460,9 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
 
 #if defined(IPV6_PKTINFO)
     if (src_addr) {
+#ifndef WIN32
         struct in6_pktinfo ipi6 = {0};
 
-#ifndef WIN32
         uint8_t c[CMSG_SPACE(sizeof(struct in6_pktinfo))] = {0};
         struct iovec iov;
         struct msghdr msg;
@@ -487,7 +487,7 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         ret = sendmsg(sock, &msg, flags);
 #else  // WIN32
         WSABUF wsaBuf;
-        wsaBuf.buf = buf;
+        wsaBuf.buf = (void *)buf;
         wsaBuf.len = len;
         uint8_t c[WSA_CMSG_SPACE(sizeof(struct in6_pktinfo))] = {0};
 
@@ -497,7 +497,7 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         wsaMsg.namelen = addrlen;
         wsaMsg.lpBuffers = &wsaBuf;
         wsaMsg.dwBufferCount = 1;
-        wsaMsg.Control.buf = c;
+        wsaMsg.Control.buf = (void *)c;
 
         // Set the source address inside the control message
         if (IN6_IS_ADDR_V4MAPPED(&src_addr->sin6_addr)) {
@@ -528,7 +528,7 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
         if (WSAIoctl(sock, SIO_GET_EXTENSION_FUNCTION_POINTER, &WSARecvMsg_GUID,
                      sizeof(GUID), &WSARecvMsg, sizeof(WSARecvMsg),
                      &dwBytesReturned, NULL, NULL) == SOCKET_ERROR) {
-            PCP_LOG(PCP_LOGLVL_PERR, ("WSAIoctl failed"));
+            pcp_logger(PCP_LOGLVL_PERR, "WSAIoctl failed");
             return 1;
         }
 
