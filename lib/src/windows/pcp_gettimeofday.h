@@ -26,6 +26,8 @@
 #ifndef PCP_GETTIMEOFDAY
 #define PCP_GETTIMEOFDAY
 
+struct timeval;
+struct timezone;
 int gettimeofday(struct timeval *tv, struct timezone *tz);
 
 #endif /*PCP_GETTIMEOFDAY*/

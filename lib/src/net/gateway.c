@@ -307,7 +307,7 @@ int getgateways(struct sockaddr_in6 **gws) {
             (IPV6_IS_ADDR_ANY(&row->NextHop.Ipv6.sin6_addr))) {
             continue;
         } else if ((row->NextHop.si_family == AF_INET) &&
-                   (&row->NextHop.Ipv6.sin6_addr == INADDR_ANY)) {
+                   (row->NextHop.Ipv4.sin_addr.s_addr == INADDR_ANY)) {
             continue;
         } else if (row->NextHop.si_family == AF_INET) {
             (*gws)[ret].sin6_family = AF_INET6;
