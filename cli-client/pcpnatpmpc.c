@@ -33,6 +33,7 @@
 #include "getopt.h"
 #include "pcpnatpmp.h"
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -189,6 +190,8 @@ typedef pcp_deviceid_option_t pcp_app_deviceid_t;
            TABS1 "Set flow's protocol by protocol number.")                    \
     OPTION(SHORT(l), lifetime, "lifetime", REQARG,                             \
            TABS1 "Set flow's lifetime (in seconds).")                          \
+    OPTION(NOSHORT, nonce, "nonce", REQARG,                                    \
+           TABS2 "Set PCP nonce as 24 hex characters.")                        \
     HELP_MSG("")                                                               \
     HELP_MSG("PCP options for MAP/PEER operation:")                            \
     IFDEF(PCP_FLOW_PRIORITY,                                                   \
@@ -426,6 +429,8 @@ struct pcp_params {
     pcp_app_location_t app_location;
 
     uint8_t has_mappeer_data;
+    uint8_t has_nonce;
+    uint32_t nonce_words_be[3];
     pcp_ctx_t *ctx;
 
     struct pcp_server_list *pcp_servers;
@@ -553,6 +558,13 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "%s:%d Could not create flow \n", __FUNCTION__,
                     __LINE__);
             exit(1);
+        }
+        if (p.has_nonce) {
+            if (pcp_flow_set_nonce(flow, p.nonce_words_be) != 0) {
+                fprintf(stderr, "%s:%d Could not set flow nonce\n",
+                        __FUNCTION__, __LINE__);
+                exit(1);
+            }
         }
 
 #ifdef PCP_FLOW_PRIORITY
@@ -702,6 +714,45 @@ static inline void parse_opt_prot(struct pcp_params *p) {
 
 static inline void parse_opt_lifetime(struct pcp_params *p) {
     p->opt_lifetime = (uint32_t)atoi(optarg);
+}
+
+static int parse_nonce_words_be(const char *txt, uint32_t nonce_words_be[3]) {
+    char chunk[9];
+    unsigned long parsed;
+    int i;
+    char *endptr;
+
+    if (!txt || strlen(txt) != 24) {
+        return 1;
+    }
+    for (i = 0; i < 24; i++) {
+        if (!isxdigit((unsigned char)txt[i])) {
+            return 1;
+        }
+    }
+
+    chunk[8] = '\0';
+    for (i = 0; i < 3; i++) {
+        memcpy(chunk, txt + (i * 8), 8);
+        errno = 0;
+        parsed = strtoul(chunk, &endptr, 16);
+        if ((errno != 0) || (*endptr != '\0') || (parsed > 0xFFFFFFFFUL)) {
+            return 1;
+        }
+        nonce_words_be[i] = htonl((uint32_t)parsed);
+    }
+
+    return 0;
+}
+
+static inline void parse_opt_nonce(struct pcp_params *p) {
+    if (parse_nonce_words_be(optarg, p->nonce_words_be) != 0) {
+        fprintf(stderr,
+                "Invalid nonce format. Expected exactly 24 hex chars.\n");
+        exit(1);
+    }
+    p->has_nonce = 1;
+    p->has_mappeer_data = 1;
 }
 
 #ifdef PCP_FLOW_PRIORITY
