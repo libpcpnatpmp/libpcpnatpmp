@@ -80,3 +80,7 @@ jobs:
       # Run the CTest suite from the configured build tree.
       run: ctest --test-dir ${{ steps.strings.outputs.build-output-dir }} --build-config ${{ matrix.build_type }} --output-on-failure
 
+    - name: Install
+      # Validate CMake install rules.
+      run: cmake --install ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} --prefix ${{ github.workspace }}/install
+
