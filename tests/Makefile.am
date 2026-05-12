@@ -1,4 +1,4 @@
-AM_CPPFLAGS = -I$(top_srcdir)/lib/include -I$(top_srcdir)/lib/src/net -I$(top_srcdir)/lib/src
+AM_CPPFLAGS = -I$(top_srcdir)/lib/include -I$(top_srcdir)/lib/src/net -I$(top_srcdir)/lib/src -I$(top_srcdir)/test-server
 AM_CPPFLAGS += $(PCP_CPPFLAGS)
 AM_CFLAGS = $(PCP_CFLAGS)
 
@@ -21,7 +21,9 @@ check_PROGRAMS = test_server_restart \
 
 noinst_HEADERS = test_macro.h
 
-test_flow_notify_SOURCES = test_flow_notify.c
+TEST_PCP_SERVER_HELPER_SOURCES = test_pcp_server_helper.c ../test-server/pcp-server.c ../test-server/pcp-server.h
+
+test_flow_notify_SOURCES = test_flow_notify.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_flow_notify_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_flow_notify_LDFLAGS = -static
 
@@ -40,15 +42,15 @@ test_server_restart_SOURCES = test_server_restart.c
 test_server_restart_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_server_restart_LDFLAGS = -static
 
-test_version_negotiation_SOURCES = test_version_negotiation.c
+test_version_negotiation_SOURCES = test_version_negotiation.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_version_negotiation_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_version_negotiation_LDFLAGS = -static
 
-test_pcp_client_map_opcode_SOURCES = test_pcp_client_map_opcode.c
+test_pcp_client_map_opcode_SOURCES = test_pcp_client_map_opcode.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_pcp_client_map_opcode_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_client_map_opcode_LDFLAGS = -static
 
-test_pcp_client_peer_opcode_SOURCES = test_pcp_client_peer_opcode.c
+test_pcp_client_peer_opcode_SOURCES = test_pcp_client_peer_opcode.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_pcp_client_peer_opcode_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_client_peer_opcode_LDFLAGS = -static
 
@@ -56,7 +58,7 @@ test_event_handler_SOURCES = test_event_handler.c
 test_event_handler_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_event_handler_LDFLAGS = -static
 
-test_lifetime_renewal_SOURCES = test_lifetime_renewal.c
+test_lifetime_renewal_SOURCES = test_lifetime_renewal.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_lifetime_renewal_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_lifetime_renewal_LDFLAGS = -static
 
@@ -87,7 +89,6 @@ test_pcp_msg_SOURCES = test_pcp_msg.c
 test_pcp_msg_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_msg_LDFLAGS = -static
 
-test_server_reping_SOURCES = test_server_reping.c
+test_server_reping_SOURCES = test_server_reping.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_server_reping_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_server_reping_LDFLAGS = -static
-

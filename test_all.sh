@@ -39,20 +39,17 @@ echo "" > "$CURRENT_DIR/TEMP.tmp"
 
 export PCP_USE_IPV6_SOCKET=0
 
-$PATH_SCRIPT/test_flow_notify.sh
+test_flow_notify
 Get_Status $? "test_flow_notify           "
 
-$PATH_SCRIPT/test_version_negotiation.sh
+test_version_negotiation 2
 Get_Status $? "test_version_negotiation   "
 
-$PATH_SCRIPT/test_pcp_client_map_opcode.sh
+test_pcp_client_map_opcode
 Get_Status $? "test_pcp_client_map_opcode "
 
-$PATH_SCRIPT/test_pcp_client_peer_opcode.sh
+test_pcp_client_peer_opcode
 Get_Status $? "test_pcp_client_peer_opcode"
-
-$PATH_SCRIPT/test_server_restart.sh
-Get_Status $? "test_server_restart        "
 
 $PATH_SCRIPT/test_get_dscp.sh
 Get_Status $? "test_get_dscp              "
@@ -60,10 +57,10 @@ Get_Status $? "test_get_dscp              "
 $PATH_SCRIPT/test_flow_md.sh
 Get_Status $? "test_flow_md               "
 
-$PATH_SCRIPT/test_lifetime_renewal.sh
+test_lifetime_renewal
 Get_Status $? "test_lifetime_renewal      "
 
-$PATH_SCRIPT/test_server_reping.sh
+test_server_reping
 Get_Status $? "test_server_reping         "
 
 test_event_handler

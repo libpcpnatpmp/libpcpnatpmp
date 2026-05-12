@@ -1,4 +1,4 @@
-include_directories (../lib ../lib/src ../lib/src/net)
+include_directories (../lib ../lib/src ../lib/src/net ../test-server)
 if (WIN32)
     include_directories (../lib/src/windows ../win_utils)
 endif ()
@@ -23,10 +23,23 @@ if (NOT WIN32)
     endfunction ()
 endif ()
 
-add_executable (test_flow_notify test_flow_notify.c)
+set (TEST_PCP_SERVER_HELPER_SOURCES
+    test_pcp_server_helper.c
+    ../test-server/pcp-server.c
+)
+
+set (TEST_FLOW_NOTIFY_SOURCES
+    test_flow_notify.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_flow_notify ${TEST_FLOW_NOTIFY_SOURCES})
 add_executable (test_event_handler test_event_handler.c)
 add_executable (test_gateway test_gateway.c)
-add_executable (test_lifetime_renewal test_lifetime_renewal.c)
+set (TEST_LIFETIME_RENEWAL_SOURCES
+    test_lifetime_renewal.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_lifetime_renewal ${TEST_LIFETIME_RENEWAL_SOURCES})
 add_executable (test_pcp_api test_pcp_api.c)
 set (TEST_PCP_CLI_NONCE_SRC
     test_pcp_cli_nonce.c
@@ -40,15 +53,36 @@ if (WIN32)
 endif ()
 add_executable (test_pcp_cli_nonce ${TEST_PCP_CLI_NONCE_SRC})
 add_executable (test_pcp_client_db test_pcp_client_db.c)
-add_executable (test_pcp_client_map_opcode test_pcp_client_map_opcode.c)
-add_executable (test_pcp_client_peer_opcode test_pcp_client_peer_opcode.c)
+set (TEST_PCP_CLIENT_MAP_OPCODE_SOURCES
+    test_pcp_client_map_opcode.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_pcp_client_map_opcode
+                ${TEST_PCP_CLIENT_MAP_OPCODE_SOURCES})
+set (TEST_PCP_CLIENT_PEER_OPCODE_SOURCES
+    test_pcp_client_peer_opcode.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_pcp_client_peer_opcode
+                ${TEST_PCP_CLIENT_PEER_OPCODE_SOURCES})
 add_executable (test_pcp_logger test_pcp_logger.c)
 add_executable (test_pcp_msg test_pcp_msg.c)
 add_executable (test_ping_gws test_server_discovery.c)
-add_executable (test_server_reping test_server_reping.c)
-add_executable (test_server_restart test_server_restart.c)
+set (TEST_SERVER_REPING_SOURCES
+    test_server_reping.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_server_reping ${TEST_SERVER_REPING_SOURCES})
+set (TEST_SERVER_RESTART_SOURCES
+    test_server_restart.c
+)
+add_executable (test_server_restart ${TEST_SERVER_RESTART_SOURCES})
 add_executable (test_sock_ntop test_sock_ntop.c)
-add_executable (test_version_negotiation test_version_negotiation.c)
+set (TEST_VERSION_NEGOTIATION_SOURCES
+    test_version_negotiation.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_version_negotiation ${TEST_VERSION_NEGOTIATION_SOURCES})
 
 target_link_libraries (test_flow_notify pcpnatpmp)
 target_link_libraries (test_event_handler pcpnatpmp)
@@ -68,28 +102,25 @@ target_link_libraries (test_sock_ntop pcpnatpmp)
 target_link_libraries (test_version_negotiation pcpnatpmp)
 
 register_pcp_test (test_event_handler)
+register_pcp_test (test_flow_notify)
 register_pcp_test (test_gateway)
+register_pcp_test (test_lifetime_renewal)
 register_pcp_test (test_pcp_api)
 register_pcp_test (test_pcp_cli_nonce)
 register_pcp_test (test_pcp_client_db)
+register_pcp_test (test_pcp_client_map_opcode)
+register_pcp_test (test_pcp_client_peer_opcode)
 register_pcp_test (test_pcp_logger)
 register_pcp_test (test_pcp_msg)
 register_pcp_test (test_ping_gws)
+register_pcp_test (test_server_reping)
 register_pcp_test (test_sock_ntop)
+register_pcp_test (test_version_negotiation)
 
 if (NOT WIN32)
-    register_pcp_shell_test (test_flow_notify_sh test_flow_notify.sh)
-    register_pcp_shell_test (test_version_negotiation_sh
-                             test_version_negotiation.sh)
-    register_pcp_shell_test (test_pcp_client_map_opcode_sh
-                             test_pcp_client_map_opcode.sh)
-    register_pcp_shell_test (test_pcp_client_peer_opcode_sh
-                             test_pcp_client_peer_opcode.sh)
     register_pcp_shell_test (test_server_restart_sh test_server_restart.sh)
-    register_pcp_shell_test (test_lifetime_renewal_sh test_lifetime_renewal.sh)
     register_pcp_shell_test (test_pcp_cli_client_sh test_pcp_cli_client.sh)
     register_pcp_shell_test (test_pcp_server_sh test_pcp_server.sh)
-    register_pcp_shell_test (test_server_reping_sh test_server_reping.sh)
 
     if (WITH_EXPERIMENTAL)
         register_pcp_shell_test (test_get_dscp_sh test_get_dscp.sh)

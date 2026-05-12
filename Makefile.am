@@ -37,18 +37,12 @@ SUBDIRS = lib \
           $(SERVER_DIR)
 
 
-EXTRA_DIST = tests/test_flow_notify.sh \
-             tests/test_version_negotiation.sh \
-             tests/test_pcp_client_map_opcode.sh \
-             tests/test_pcp_client_peer_opcode.sh \
-             tests/test_server_restart.sh \
+EXTRA_DIST = tests/test_server_restart.sh \
              tests/test_get_dscp.sh \
-             tests/test_lifetime_renewal.sh \
              autogen.sh \
              tests/test_pcp_cli_client.sh \
              tests/test_pcp_server.sh \
              tests/test_flow_md.sh \
-             tests/test_server_reping.sh \
              INSTALL.md \
              README.md \
              cli-client/README.md \
@@ -75,12 +69,12 @@ else
 PCP_SADSCP_TESTS =
 endif
 
-TESTS = tests/test_flow_notify.sh \
-        tests/test_version_negotiation.sh \
-        tests/test_pcp_client_map_opcode.sh \
-        tests/test_pcp_client_peer_opcode.sh \
+TESTS = tests/test_flow_notify \
+        tests/test_version_negotiation \
+        tests/test_pcp_client_map_opcode \
+        tests/test_pcp_client_peer_opcode \
         tests/test_server_restart.sh \
-        tests/test_lifetime_renewal.sh \
+        tests/test_lifetime_renewal \
         tests/test_event_handler \
         tests/test_gw \
         tests/test_ping_gws \
@@ -92,7 +86,6 @@ TESTS = tests/test_flow_notify.sh \
         tests/test_sock_ntop \
         tests/test_pcp_logger \
         tests/test_pcp_msg \
-        tests/test_server_reping.sh \
+        tests/test_server_reping \
         $(PCP_SADSCP_TESTS) \
         $(PCP_EXPERIMENTAL_TESTS)
-

@@ -33,6 +33,8 @@
 
 #include "pcpnatpmp.h"
 
+#include "test_pcp_server_helper.h"
+
 #include "pcp_client_db.h"
 #include "pcp_socket.h"
 #include "test_macro.h"
@@ -45,9 +47,18 @@ int main(void) {
     uint32_t lifetime = 10;
     pcp_flow_t *flow = NULL;
     pcp_ctx_t *ctx;
+    test_pcp_server_sequence_t server_sequence;
+    test_pcp_server_config_t server_config;
 
     PD_SOCKET_STARTUP();
     pcp_log_level = PCP_LOGLVL_DEBUG;
+
+    test_pcp_server_config_init(&server_config);
+    server_config.server_port = "5351";
+    server_config.server_address = "0.0.0.0";
+    server_config.server_info.end_after_recv = 4;
+    test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
+    test_sleep_ms(100);
 
     printf("\n");
     printf("#############################################\n");
@@ -67,10 +78,12 @@ int main(void) {
                         protocol, lifetime, NULL);
 
     pcp_pulse(ctx, NULL); // send packet
+    TEST(test_pcp_server_sequence_pulse(&server_sequence, 0) >= 0);
     TEST(s->server_state == pss_wait_ping_resp);
     s->server_state = pss_not_working;
-    sleep(1);
-    TEST(pcp_wait(flow, 9000, 0) == pcp_state_succeeded);
+    test_sleep_ms(1000);
+    TEST(test_pcp_wait_with_servers(flow, 9000, &server_sequence) ==
+         pcp_state_succeeded);
 
     TEST(s->server_state == pss_wait_io);
     pcp_terminate(ctx, 1);
@@ -83,18 +96,21 @@ int main(void) {
                         protocol, lifetime, NULL);
 
     pcp_pulse(ctx, NULL); // send packet
+    TEST(test_pcp_server_sequence_pulse(&server_sequence, 0) >= 0);
     TEST(s->server_state == pss_wait_ping_resp);
 
     pcp_db_rem_flow(flow);
     flow->kd.nonce.n[0]++;
     pcp_db_add_flow(flow);
 
-    sleep(1);
-    TEST(pcp_wait(flow, 9000, 0) == pcp_state_succeeded);
+    test_sleep_ms(1000);
+    TEST(test_pcp_wait_with_servers(flow, 9000, &server_sequence) ==
+         pcp_state_succeeded);
 
     printf("Server state %d\n", s->server_state);
     TEST(s->server_state == pss_wait_io);
     pcp_terminate(ctx, 1);
+    test_pcp_server_sequence_stop(&server_sequence);
 
     ctx = pcp_init(0, NULL);
     s = get_pcp_server(ctx,
@@ -108,7 +124,7 @@ int main(void) {
     TEST(s->next_timeout.tv_sec >=
          time(NULL) + PCP_SERVER_DISCOVERY_RETRY_DELAY - 2);
     s->next_timeout.tv_sec = (long)time(NULL) + 1;
-    sleep(2);
+    test_sleep_ms(2000);
     pcp_pulse(ctx, NULL);
     TEST(pcp_wait(flow, 43000, 0) == pcp_state_failed);
     TEST(s->server_state == pss_ping);
@@ -125,34 +141,34 @@ int main(void) {
     s->server_state = pss_ping;
     s->pcp_version++;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
     s->server_state = pss_ping;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
     s->server_state = pss_ping;
     pcp_flow_updated(flow);
     s->ping_flow_msg = NULL;
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
     s->server_state = pss_wait_io;
     flow->state = pfs_wait_for_lifetime_renew;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(flow->state == pfs_failed);
 
     s->server_state = pss_wait_io;
     flow->state = pfs_wait_resp;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(flow->state == pfs_failed);
 
@@ -160,7 +176,7 @@ int main(void) {
     s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
@@ -169,7 +185,7 @@ int main(void) {
     s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
     TEST(s->pcp_version == PCP_MAX_SUPPORTED_VERSION);
@@ -179,7 +195,7 @@ int main(void) {
     s->ping_flow_msg = NULL;
     s->pcp_version = 0;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_not_working);
 
@@ -188,14 +204,14 @@ int main(void) {
     s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
     s->server_state = pss_wait_ping_resp;
     s->ping_count = PCP_MAX_PING_COUNT - 1;
     pcp_flow_updated(flow);
-    sleep(1);
+    test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_not_working);
 

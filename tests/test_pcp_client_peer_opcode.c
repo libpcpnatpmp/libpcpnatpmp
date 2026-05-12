@@ -29,6 +29,8 @@
 
 #include "pcpnatpmp.h"
 
+#include "test_pcp_server_helper.h"
+
 #include "pcp_socket.h"
 #include "test_macro.h"
 #include "unp.h"
@@ -43,9 +45,18 @@ int main(void) {
 
     pcp_flow_t *flow = NULL;
     pcp_ctx_t *ctx;
+    test_pcp_server_sequence_t server_sequence;
+    test_pcp_server_config_t server_config;
 
     PD_SOCKET_STARTUP();
     pcp_log_level = 5;
+
+    test_pcp_server_config_init(&server_config);
+    server_config.server_port = "5351";
+    server_config.server_address = "0.0.0.0";
+    server_config.server_info.end_after_recv = 1;
+    test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
+    test_sleep_ms(100);
 
     memset(&source, 0, sizeof(source));
     memset(&destination, 0, sizeof(destination));
@@ -70,7 +81,8 @@ int main(void) {
                         (struct sockaddr *)&destination,
                         (struct sockaddr *)&ext, protocol, lifetime, NULL);
 
-    TEST(pcp_wait(flow, 3000, 0) == pcp_state_succeeded);
+    TEST(test_pcp_wait_with_servers(flow, 3000, &server_sequence) ==
+         pcp_state_succeeded);
 
     pcp_close_flow(flow);
     pcp_delete_flow(flow);
@@ -78,6 +90,7 @@ int main(void) {
 
     PD_SOCKET_CLEANUP();
     pcp_terminate(ctx, 0);
+    test_pcp_server_sequence_stop(&server_sequence);
 
     return 0;
 }

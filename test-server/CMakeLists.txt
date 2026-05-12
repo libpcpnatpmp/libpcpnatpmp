@@ -6,6 +6,7 @@ set (PCP_SERVER_INC_DIRS
 )
     
 set (PCP_SERVER_SOURCES
+    main.c
     pcp-server.c
 )
 

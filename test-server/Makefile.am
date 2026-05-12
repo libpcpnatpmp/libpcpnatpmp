@@ -4,7 +4,7 @@ AM_CFLAGS = $(PCP_CFLAGS) -I$(top_srcdir)/lib/src/windows
 
 noinst_PROGRAMS = pcp-server
 
-pcp_server_SOURCES = pcp-server.c
+pcp_server_SOURCES = main.c pcp-server.c pcp-server.h
 pcp_server_CPPFLAGS = $(AM_CPPFLAGS)
 pcp_server_LDADD = $(GCOVLIB)
 if PLATFORM_WINDOWS
