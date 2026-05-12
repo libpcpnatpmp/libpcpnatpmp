@@ -28,3 +28,7 @@ if (WIN32)
         ../win_utils
     )
 endif ()
+
+install (TARGETS pcpnatpmpc
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)

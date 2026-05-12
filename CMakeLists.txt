@@ -5,6 +5,7 @@ project (pcpnatpmp-client VERSION 2.0.0)
 include (CheckIncludeFile)
 include (CheckStructHasMember)
 include (CheckSymbolExists)
+include (GNUInstallDirs)
 
 enable_testing ()
 
