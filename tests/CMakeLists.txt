@@ -3,6 +3,8 @@ if (WIN32)
     include_directories (../lib/src/windows ../win_utils)
 endif ()
 
+find_package (Threads REQUIRED)
+
 function (register_pcp_test target)
     add_test (NAME ${target} COMMAND ${target})
 endfunction ()
@@ -75,6 +77,7 @@ set (TEST_SERVER_REPING_SOURCES
 add_executable (test_server_reping ${TEST_SERVER_REPING_SOURCES})
 set (TEST_SERVER_RESTART_SOURCES
     test_server_restart.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
 )
 add_executable (test_server_restart ${TEST_SERVER_RESTART_SOURCES})
 add_executable (test_sock_ntop test_sock_ntop.c)
@@ -97,7 +100,7 @@ target_link_libraries (test_pcp_logger pcpnatpmp)
 target_link_libraries (test_pcp_msg pcpnatpmp)
 target_link_libraries (test_ping_gws pcpnatpmp)
 target_link_libraries (test_server_reping pcpnatpmp)
-target_link_libraries (test_server_restart pcpnatpmp)
+target_link_libraries (test_server_restart pcpnatpmp Threads::Threads)
 target_link_libraries (test_sock_ntop pcpnatpmp)
 target_link_libraries (test_version_negotiation pcpnatpmp)
 
@@ -114,11 +117,11 @@ register_pcp_test (test_pcp_logger)
 register_pcp_test (test_pcp_msg)
 register_pcp_test (test_ping_gws)
 register_pcp_test (test_server_reping)
+register_pcp_test (test_server_restart)
 register_pcp_test (test_sock_ntop)
 register_pcp_test (test_version_negotiation)
 
 if (NOT WIN32)
-    register_pcp_shell_test (test_server_restart_sh test_server_restart.sh)
     register_pcp_shell_test (test_pcp_cli_client_sh test_pcp_cli_client.sh)
     register_pcp_shell_test (test_pcp_server_sh test_pcp_server.sh)
 

@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef WIN32
 #include <winsock2.h>
 
@@ -25,11 +26,13 @@
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
 #include "pcpnatpmp.h"
 
+#include "pcp-server.h"
 #include "pcp_client_db.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
@@ -38,6 +41,40 @@
 
 pcp_flow_t *flow_to_wait = NULL;
 uint32_t notified = 0;
+
+typedef struct server_thread_args {
+    uint8_t second_server_requests;
+} server_thread_args_t;
+
+static void init_server_info(server_info_t *server_info, uint8_t end_after_recv) {
+    memset(server_info, 0, sizeof(*server_info));
+    server_info->server_version = 2;
+    server_info->default_result_code = 255;
+    server_info->end_after_recv = end_after_recv;
+}
+
+#ifdef WIN32
+static DWORD WINAPI server_thread_main(LPVOID arg) {
+#else
+static void *server_thread_main(void *arg) {
+#endif
+    server_thread_args_t *args = (server_thread_args_t *)arg;
+    server_info_t server_info;
+
+    init_server_info(&server_info, 1);
+    server_info.epoch_time_start = time(NULL);
+    execPCPServer("5351", "0.0.0.0", &server_info);
+
+    init_server_info(&server_info, args->second_server_requests);
+    server_info.epoch_time_start = time(NULL);
+    execPCPServer("5351", "0.0.0.0", &server_info);
+
+#ifdef WIN32
+    return 0;
+#else
+    return NULL;
+#endif
+}
 
 static void notify_cb_1(pcp_flow_t *f, struct sockaddr *src_addr UNUSED,
                         struct sockaddr *ext_addr UNUSED, pcp_fstate_e s,
@@ -48,8 +85,7 @@ static void notify_cb_1(pcp_flow_t *f, struct sockaddr *src_addr UNUSED,
     sleep(1);
 }
 
-int main(int argc, char *argv[] UNUSED) {
-
+static int run_scenario(uint8_t second_server_requests, int expect_success) {
     struct sockaddr_storage destination1_ip4;
     struct sockaddr_storage source1_ip4;
     struct sockaddr_storage ext1_ip4;
@@ -63,20 +99,32 @@ int main(int argc, char *argv[] UNUSED) {
     pcp_flow_t *flow1 = NULL;
     pcp_flow_t *flow2 = NULL;
     pcp_ctx_t *ctx;
+    server_thread_args_t thread_args;
+#ifdef WIN32
+    HANDLE thread_handle;
+#else
+    pthread_t thread;
+#endif
 
-    PD_SOCKET_STARTUP();
-    pcp_log_level = 5;
+    thread_args.second_server_requests = second_server_requests;
+
+#ifdef WIN32
+    thread_handle = CreateThread(NULL, 0, server_thread_main, &thread_args, 0, NULL);
+    TEST(thread_handle != NULL);
+    Sleep(4000);
+#else
+    TEST(pthread_create(&thread, NULL, server_thread_main, &thread_args) == 0);
+    sleep(4);
+#endif
 
     ctx = pcp_init(0, NULL);
     TEST(ctx);
     pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2);
 
-    // first flow setup
     sock_pton("0.0.0.0:0", (struct sockaddr *)&destination1_ip4);
     sock_pton("127.0.0.1:2222", (struct sockaddr *)&source1_ip4);
     sock_pton("2.2.2.2", (struct sockaddr *)&ext1_ip4);
 
-    // second flow setup
     sock_pton("0.0.0.0:0", (struct sockaddr *)&destination2_ip4);
     sock_pton("127.0.0.1:1111", (struct sockaddr *)&source2_ip4);
     sock_pton("1.1.1.1", (struct sockaddr *)&ext2_ip4);
@@ -106,11 +154,12 @@ int main(int argc, char *argv[] UNUSED) {
 
     pcp_set_flow_change_cb(ctx, notify_cb_1, NULL);
     flow_to_wait = flow2;
+    notified = 0;
 
     TEST(pcp_wait(flow1, 2000, 0) == pcp_state_succeeded);
 
     TEST(pcp_wait(flow2, 2000, 0) == pcp_state_succeeded);
-    if (argc == 1) {
+    if (expect_success) {
         pcp_fstate_e e = pcp_wait(flow1, 200, 0);
         printf("e=%d", e);
         TEST(e == pcp_state_succeeded);
@@ -130,6 +179,24 @@ int main(int argc, char *argv[] UNUSED) {
     flow2 = NULL;
 
     pcp_terminate(ctx, 1);
+
+#ifdef WIN32
+    WaitForSingleObject(thread_handle, INFINITE);
+    CloseHandle(thread_handle);
+#else
+    pthread_join(thread, NULL);
+#endif
+
+    return 0;
+}
+
+int main(void) {
+
+    PD_SOCKET_STARTUP();
+    pcp_log_level = 5;
+
+    run_scenario(2, 1);
+    run_scenario(1, 0);
 
     PD_SOCKET_CLEANUP();
     return 0;

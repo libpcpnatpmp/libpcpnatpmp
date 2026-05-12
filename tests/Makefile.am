@@ -38,8 +38,8 @@ test_ping_gws_SOURCES = test_server_discovery.c
 test_ping_gws_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_ping_gws_LDFLAGS = -static
 
-test_server_restart_SOURCES = test_server_restart.c
-test_server_restart_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_server_restart_SOURCES = test_server_restart.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_server_restart_LDADD = $(top_builddir)/lib/libpcpnatpmp.la -lpthread
 test_server_restart_LDFLAGS = -static
 
 test_version_negotiation_SOURCES = test_version_negotiation.c $(TEST_PCP_SERVER_HELPER_SOURCES)

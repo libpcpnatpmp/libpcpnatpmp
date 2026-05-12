@@ -96,6 +96,10 @@ int test_pcp_server_sequence_pulse(test_pcp_server_sequence_t *sequence,
         const test_pcp_server_config_t *config =
             &sequence->configs[sequence->next_config];
 
+        if (config->start_delay_ms == 0) {
+            return start_next_server(sequence);
+        }
+
         gettimeofday(&now, NULL);
         sequence->next_start_time.tv_sec =
             now.tv_sec + (config->start_delay_ms / 1000);

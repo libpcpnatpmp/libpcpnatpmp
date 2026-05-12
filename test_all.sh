@@ -84,8 +84,8 @@ Get_Status $? "test_pcp_logger            "
 test_pcp_msg
 Get_Status $? "test_pcp_msg               "
 
-$PATH_SCRIPT/test_server_reping.sh
-Get_Status $? "test_server_reping         "
+test_server_restart
+Get_Status $? "test_server_restart        "
 
 $PATH_SCRIPT/test_pcp_cli_client.sh
 Get_Status $? "test_pcp_cli_client        "

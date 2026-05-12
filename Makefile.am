@@ -37,8 +37,7 @@ SUBDIRS = lib \
           $(SERVER_DIR)
 
 
-EXTRA_DIST = tests/test_server_restart.sh \
-             tests/test_get_dscp.sh \
+EXTRA_DIST = tests/test_get_dscp.sh \
              autogen.sh \
              tests/test_pcp_cli_client.sh \
              tests/test_pcp_server.sh \
@@ -73,7 +72,7 @@ TESTS = tests/test_flow_notify \
         tests/test_version_negotiation \
         tests/test_pcp_client_map_opcode \
         tests/test_pcp_client_peer_opcode \
-        tests/test_server_restart.sh \
+        tests/test_server_restart \
         tests/test_lifetime_renewal \
         tests/test_event_handler \
         tests/test_gw \
