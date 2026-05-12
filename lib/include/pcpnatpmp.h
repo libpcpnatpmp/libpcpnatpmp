@@ -155,6 +155,14 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
                          struct sockaddr *dst_addr, struct sockaddr *ext_addr,
                          uint8_t protocol, uint32_t lifetime, void *userdata);
 
+/**
+ * Sets PCP nonce for all server-specific flow instances belonging to @flow.
+ * Useful for renewing an existing mapping using a known nonce value.
+ *
+ * @return 0 on success, 1 on failure.
+ */
+int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]);
+
 void pcp_flow_set_lifetime(pcp_flow_t *f, uint32_t lifetime);
 
 /*

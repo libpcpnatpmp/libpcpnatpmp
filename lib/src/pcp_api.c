@@ -494,6 +494,20 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
     return data.ffirst;
 }
 
+int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]) {
+    pcp_flow_t *iter;
+
+    if (!flow || !nonce_words_be) {
+        return 1;
+    }
+
+    for (iter = flow; iter != NULL; iter = iter->next_child) {
+        memcpy(iter->kd.nonce.n, nonce_words_be, sizeof(iter->kd.nonce.n));
+    }
+
+    return 0;
+}
+
 void pcp_flow_set_lifetime(pcp_flow_t *f, uint32_t lifetime) {
     pcp_flow_t *fiter;
 

@@ -8,6 +8,17 @@ add_executable (test_event_handler test_event_handler.c)
 add_executable (test_gateway test_gateway.c)
 add_executable (test_lifetime_renewal test_lifetime_renewal.c)
 add_executable (test_pcp_api test_pcp_api.c)
+set (TEST_PCP_CLI_NONCE_SRC
+    test_pcp_cli_nonce.c
+)
+if (WIN32)
+    list (APPEND TEST_PCP_CLI_NONCE_SRC
+        ../win_utils/getopt.c
+        ../win_utils/getopt_long.c
+        ../lib/src/windows/pcp_gettimeofday.c
+    )
+endif ()
+add_executable (test_pcp_cli_nonce ${TEST_PCP_CLI_NONCE_SRC})
 add_executable (test_pcp_client_db test_pcp_client_db.c)
 add_executable (test_pcp_client_map_opcode test_pcp_client_map_opcode.c)
 add_executable (test_pcp_client_peer_opcode test_pcp_client_peer_opcode.c)
@@ -24,6 +35,7 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
+target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
 target_link_libraries (test_pcp_client_map_opcode pcpnatpmp)
 target_link_libraries (test_pcp_client_peer_opcode pcpnatpmp)

@@ -13,6 +13,7 @@ check_PROGRAMS = test_server_restart \
                  test_lifetime_renewal \
                  test_pcp_client_db \
                  test_pcp_api \
+                 test_pcp_cli_nonce \
                  test_sock_ntop \
                  test_pcp_logger \
                  test_pcp_msg \
@@ -67,6 +68,13 @@ test_pcp_api_SOURCES = test_pcp_api.c
 test_pcp_api_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_api_LDFLAGS = -static
 
+test_pcp_cli_nonce_SOURCES = test_pcp_cli_nonce.c
+if PLATFORM_WINDOWS
+test_pcp_cli_nonce_SOURCES += ../win_utils/getopt.c ../win_utils/getopt_long.c ../lib/src/windows/pcp_gettimeofday.c
+endif
+test_pcp_cli_nonce_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_pcp_cli_nonce_LDFLAGS = -static
+
 test_sock_ntop_SOURCES = test_sock_ntop.c
 test_sock_ntop_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_sock_ntop_LDFLAGS = -static
@@ -82,6 +90,4 @@ test_pcp_msg_LDFLAGS = -static
 test_server_reping_SOURCES = test_server_reping.c
 test_server_reping_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_server_reping_LDFLAGS = -static
-
-
 

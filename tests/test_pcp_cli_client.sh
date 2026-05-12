@@ -26,6 +26,8 @@ pcpnatpmpc --external ::0bad:ip6 &>/dev/null &&  echo_exit "Failed test of bad a
 pcpnatpmpc --external [::2]:99999  &>/dev/null &&  echo_exit "Failed test of bad arguments on input #4"
 
 pcpnatpmpc --internal [::0bad:ip6]:1234 &>/dev/null &&  echo_exit "Failed test of bad arguments on input #5"
+pcpnatpmpc --nonce 1234abcd --internal :1234 &>/dev/null && echo_exit "Failed test of bad nonce length"
+pcpnatpmpc --nonce 12345678901234567890123Z --internal :1234 &>/dev/null && echo_exit "Failed test of bad nonce characters"
 
 pcpnatpmpc --disable-autodiscovery --server 1.2.3.4:1234 --peer 1.2.3.4:1234 --internal 0.0.0.0:4321 --external 1.1.1.1:4321 --protocol 17 --lifetime 120 --pcp-version 1 --timeout 0 &>/dev/null
 
