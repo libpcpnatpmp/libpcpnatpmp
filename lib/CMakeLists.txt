@@ -17,6 +17,8 @@ if (WIN32)
     )
 endif ()
 
+include (GNUInstallDirs)
+
 # header files for building PCP/NAT-PMP client library
 set (LIBPCP_INC_FILES
     include/pcpnatpmp.h
@@ -62,3 +64,23 @@ target_include_directories (pcpnatpmp PUBLIC include)
 if (WIN32)
     target_include_directories (pcpnatpmp PRIVATE src/windows ../win_utils)
 endif ()
+
+configure_file (
+    ${CMAKE_CURRENT_SOURCE_DIR}/libpcpnatpmp.pc.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/libpcpnatpmp.pc
+    @ONLY
+)
+
+install (TARGETS pcpnatpmp
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install (FILES ${CMAKE_CURRENT_SOURCE_DIR}/include/pcpnatpmp.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install (FILES ${CMAKE_CURRENT_BINARY_DIR}/libpcpnatpmp.pc
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)
