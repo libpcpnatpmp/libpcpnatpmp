@@ -648,17 +648,25 @@ void pcp_delete_flow(pcp_flow_t *f) {
 }
 
 static int delete_flow_iter(pcp_flow_t *f, void *data) {
-    if (data) {
-        pcp_close_flow_intern(f);
-        pcp_pulse(f->ctx, NULL);
-    }
+    (void)data;
     pcp_delete_flow_intern(f);
 
     return 0;
 }
 
+static int close_flow_iter(pcp_flow_t *f, void *data) {
+    (void)data;
+    pcp_close_flow_intern(f);
+
+    return 0;
+}
+
 void pcp_terminate(pcp_ctx_t *ctx, int close_flows) {
-    pcp_db_foreach_flow(ctx, delete_flow_iter, close_flows ? (void *)1 : NULL);
+    if (close_flows) {
+        pcp_db_foreach_flow(ctx, close_flow_iter, NULL);
+        pcp_pulse(ctx, NULL);
+    }
+    pcp_db_foreach_flow(ctx, delete_flow_iter, NULL);
     pcp_db_free_pcp_servers(ctx);
     pcp_socket_close(ctx);
 }

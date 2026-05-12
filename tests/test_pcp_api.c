@@ -106,6 +106,15 @@ int main(void) {
     TEST(f1->lifetime == 0);
     TEST((f1->timeout.tv_sec > 0) || (f1->timeout.tv_usec > 0));
 
+    // regression test: pcp_terminate(close_flows=1) closes and removes flows
+    ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+    TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+    TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
+                            IPPROTO_TCP, 100, NULL)) != NULL);
+    TEST(ctx->pcp_db.flow_cnt > 0);
+    pcp_terminate(ctx, 1);
+    TEST(ctx->pcp_db.flow_cnt == 0);
+
     printf("Tests succeeded.\n\n");
 
     PD_SOCKET_CLEANUP();
