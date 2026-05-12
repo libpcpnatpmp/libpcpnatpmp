@@ -17,6 +17,7 @@
 #endif
 
 #include "pcp_client_db.h"
+#include "pcp_msg.h"
 #include "pcp_socket.h"
 #include "test_macro.h"
 #include "unp.h"
@@ -105,6 +106,44 @@ int main(void) {
     pcp_flow_set_lifetime(f1, 0);
     TEST(f1->lifetime == 0);
     TEST((f1->timeout.tv_sec > 0) || (f1->timeout.tv_usec > 0));
+
+    // regression test: explicitly set nonce for all child flows and serialize
+    {
+        uint32_t nonce_words_be[3] = {htonl(0x00112233), htonl(0x44556677),
+                                      htonl(0x8899aabb)};
+        pcp_request_t *req;
+        pcp_map_v2_t *map;
+
+        pcp_terminate(ctx, 1);
+        ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5351"), 2) == 1);
+        TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(f1->next_child != NULL);
+        TEST(f1->next_child->next_child == NULL);
+        TEST(pcp_flow_set_nonce(NULL, nonce_words_be) == 1);
+        TEST(pcp_flow_set_nonce(f1, NULL) == 1);
+        TEST(pcp_flow_set_nonce(f1, nonce_words_be) == 0);
+        TEST(memcmp(f1->kd.nonce.n, nonce_words_be, sizeof(f1->kd.nonce.n)) ==
+             0);
+        TEST(memcmp(f1->next_child->kd.nonce.n, nonce_words_be,
+                    sizeof(f1->next_child->kd.nonce.n)) == 0);
+
+        req = (pcp_request_t *)build_pcp_msg(f1);
+        TEST(req != NULL);
+        TEST(req->ver == 2);
+        TEST((req->r_opcode & 0x7f) == PCP_OPCODE_MAP);
+        map = (pcp_map_v2_t *)req->next_data;
+        TEST(memcmp(map->nonce.n, nonce_words_be, sizeof(map->nonce.n)) == 0);
+
+        req = (pcp_request_t *)build_pcp_msg(f1->next_child);
+        TEST(req != NULL);
+        map = (pcp_map_v2_t *)req->next_data;
+        TEST(memcmp(map->nonce.n, nonce_words_be, sizeof(map->nonce.n)) == 0);
+    }
+
+    pcp_terminate(ctx, 1);
 
     // regression test: pcp_terminate(close_flows=1) closes and removes flows
     ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);

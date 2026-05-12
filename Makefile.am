@@ -86,6 +86,7 @@ TESTS = tests/test_flow_notify.sh \
         tests/test_ping_gws \
         tests/test_pcp_client_db \
         tests/test_pcp_api \
+        tests/test_pcp_cli_nonce \
         tests/test_pcp_cli_client.sh \
         tests/test_pcp_server.sh \
         tests/test_sock_ntop \
@@ -94,5 +95,4 @@ TESTS = tests/test_flow_notify.sh \
         tests/test_server_reping.sh \
         $(PCP_SADSCP_TESTS) \
         $(PCP_EXPERIMENTAL_TESTS)
-
 
