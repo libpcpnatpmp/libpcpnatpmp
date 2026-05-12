@@ -5,6 +5,7 @@ project (pcpnatpmp-client VERSION 2.0.0)
 include (CheckIncludeFile)
 include (CheckStructHasMember)
 include (CheckSymbolExists)
+include (CMakePackageConfigHelpers)
 include (GNUInstallDirs)
 
 enable_testing ()
@@ -125,3 +126,29 @@ endif ()
 if (BUILD_TESTS)
 add_subdirectory (tests)
 endif ()
+
+set (PCPNATPMP_CMAKE_INSTALL_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/pcpnatpmp")
+
+configure_package_config_file (
+	${CMAKE_CURRENT_SOURCE_DIR}/pcpnatpmpConfig.cmake.template
+	${CMAKE_CURRENT_BINARY_DIR}/pcpnatpmpConfig.cmake
+	INSTALL_DESTINATION ${PCPNATPMP_CMAKE_INSTALL_DIR}
+)
+
+write_basic_package_version_file (
+	${CMAKE_CURRENT_BINARY_DIR}/pcpnatpmpConfigVersion.cmake
+	VERSION ${PROJECT_VERSION}
+	COMPATIBILITY SameMajorVersion
+)
+
+install (EXPORT pcpnatpmpTargets
+	FILE pcpnatpmpTargets.cmake
+	NAMESPACE pcpnatpmp::
+	DESTINATION ${PCPNATPMP_CMAKE_INSTALL_DIR}
+)
+
+install (FILES
+	${CMAKE_CURRENT_BINARY_DIR}/pcpnatpmpConfig.cmake
+	${CMAKE_CURRENT_BINARY_DIR}/pcpnatpmpConfigVersion.cmake
+	DESTINATION ${PCPNATPMP_CMAKE_INSTALL_DIR}
+)

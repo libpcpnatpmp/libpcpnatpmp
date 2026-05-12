@@ -59,7 +59,10 @@ endif ()
 target_include_directories (pcpnatpmp PRIVATE src/ src/net/ .)
 
 # include directories with source and header files
-target_include_directories (pcpnatpmp PUBLIC include)
+target_include_directories (pcpnatpmp PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 if (WIN32)
     target_include_directories (pcpnatpmp PRIVATE src/windows ../win_utils)
@@ -72,6 +75,7 @@ configure_file (
 )
 
 install (TARGETS pcpnatpmp
+    EXPORT pcpnatpmpTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
