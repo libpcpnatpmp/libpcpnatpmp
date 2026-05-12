@@ -84,3 +84,42 @@ jobs:
       # Validate CMake install rules.
       run: cmake --install ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} --prefix ${{ github.workspace }}/install
 
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install coverage tools
+      run: sudo apt-get update && sudo apt-get install -y lcov
+
+    - name: Configure CMake (coverage)
+      run: >
+        cmake -B ${{ github.workspace }}/build-coverage
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_C_FLAGS="-DNDEBUG -DPCP_MAX_LOG_LEVEL=5 -O0 -g"
+        -DENABLE_GCOV=ON
+        -S ${{ github.workspace }}
+
+    - name: Build (coverage)
+      run: cmake --build ${{ github.workspace }}/build-coverage
+
+    - name: Test (coverage)
+      run: ctest --test-dir ${{ github.workspace }}/build-coverage --output-on-failure
+
+    - name: Generate coverage report
+      run: |
+        cd ${{ github.workspace }}/build-coverage
+        rm -f cli-client/CMakeFiles/pcpnatpmpc.dir/*.gcda
+        lcov -c --directory . --output-file info
+        lcov --ignore-errors unused --remove info '/usr/*' '*/tests/*' '*/test-server/*' '*/cli-client/*' '*/CMakeFiles/*' --output-file info.filtered
+        genhtml -o coverage-report info.filtered
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          ${{ github.workspace }}/build-coverage/info.filtered
+          ${{ github.workspace }}/build-coverage/coverage-report
+
