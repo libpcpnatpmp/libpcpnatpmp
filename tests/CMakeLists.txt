@@ -54,6 +54,18 @@ if (WIN32)
     )
 endif ()
 add_executable (test_pcp_cli_nonce ${TEST_PCP_CLI_NONCE_SRC})
+set (TEST_PCP_CLI_CLIENT_SOURCES
+    test_pcp_cli_client.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+if (WIN32)
+    list (APPEND TEST_PCP_CLI_CLIENT_SOURCES
+        ../win_utils/getopt.c
+        ../win_utils/getopt_long.c
+        ../lib/src/windows/pcp_gettimeofday.c
+    )
+endif ()
+add_executable (test_pcp_cli_client ${TEST_PCP_CLI_CLIENT_SOURCES})
 add_executable (test_pcp_client_db test_pcp_client_db.c)
 set (TEST_PCP_CLIENT_MAP_OPCODE_SOURCES
     test_pcp_client_map_opcode.c
@@ -70,6 +82,18 @@ add_executable (test_pcp_client_peer_opcode
 add_executable (test_pcp_logger test_pcp_logger.c)
 add_executable (test_pcp_msg test_pcp_msg.c)
 add_executable (test_ping_gws test_server_discovery.c)
+set (TEST_PCP_SERVER_SOURCES
+    test_pcp_server.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+if (WIN32)
+    list (APPEND TEST_PCP_SERVER_SOURCES
+        ../win_utils/getopt.c
+        ../win_utils/getopt_long.c
+        ../lib/src/windows/pcp_gettimeofday.c
+    )
+endif ()
+add_executable (test_pcp_server ${TEST_PCP_SERVER_SOURCES})
 set (TEST_SERVER_REPING_SOURCES
     test_server_reping.c
     ${TEST_PCP_SERVER_HELPER_SOURCES}
@@ -92,12 +116,14 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
+target_link_libraries (test_pcp_cli_client pcpnatpmp Threads::Threads)
 target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
 target_link_libraries (test_pcp_client_map_opcode pcpnatpmp)
 target_link_libraries (test_pcp_client_peer_opcode pcpnatpmp)
 target_link_libraries (test_pcp_logger pcpnatpmp)
 target_link_libraries (test_pcp_msg pcpnatpmp)
+target_link_libraries (test_pcp_server pcpnatpmp)
 target_link_libraries (test_ping_gws pcpnatpmp)
 target_link_libraries (test_server_reping pcpnatpmp)
 target_link_libraries (test_server_restart pcpnatpmp Threads::Threads)
@@ -109,12 +135,14 @@ register_pcp_test (test_flow_notify)
 register_pcp_test (test_gateway)
 register_pcp_test (test_lifetime_renewal)
 register_pcp_test (test_pcp_api)
+register_pcp_test (test_pcp_cli_client)
 register_pcp_test (test_pcp_cli_nonce)
 register_pcp_test (test_pcp_client_db)
 register_pcp_test (test_pcp_client_map_opcode)
 register_pcp_test (test_pcp_client_peer_opcode)
 register_pcp_test (test_pcp_logger)
 register_pcp_test (test_pcp_msg)
+register_pcp_test (test_pcp_server)
 register_pcp_test (test_ping_gws)
 register_pcp_test (test_server_reping)
 register_pcp_test (test_server_restart)
@@ -122,9 +150,6 @@ register_pcp_test (test_sock_ntop)
 register_pcp_test (test_version_negotiation)
 
 if (NOT WIN32)
-    register_pcp_shell_test (test_pcp_cli_client_sh test_pcp_cli_client.sh)
-    register_pcp_shell_test (test_pcp_server_sh test_pcp_server.sh)
-
     if (WITH_EXPERIMENTAL)
         register_pcp_shell_test (test_get_dscp_sh test_get_dscp.sh)
         register_pcp_shell_test (test_flow_md_sh test_flow_md.sh)

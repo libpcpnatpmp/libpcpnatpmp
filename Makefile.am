@@ -39,8 +39,6 @@ SUBDIRS = lib \
 
 EXTRA_DIST = tests/test_get_dscp.sh \
              autogen.sh \
-             tests/test_pcp_cli_client.sh \
-             tests/test_pcp_server.sh \
              tests/test_flow_md.sh \
              INSTALL.md \
              README.md \
@@ -79,9 +77,9 @@ TESTS = tests/test_flow_notify \
         tests/test_ping_gws \
         tests/test_pcp_client_db \
         tests/test_pcp_api \
+        tests/test_pcp_cli_client \
         tests/test_pcp_cli_nonce \
-        tests/test_pcp_cli_client.sh \
-        tests/test_pcp_server.sh \
+        tests/test_pcp_server \
         tests/test_sock_ntop \
         tests/test_pcp_logger \
         tests/test_pcp_msg \

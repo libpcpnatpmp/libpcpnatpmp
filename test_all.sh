@@ -87,10 +87,10 @@ Get_Status $? "test_pcp_msg               "
 test_server_restart
 Get_Status $? "test_server_restart        "
 
-$PATH_SCRIPT/test_pcp_cli_client.sh
+test_pcp_cli_client
 Get_Status $? "test_pcp_cli_client        "
 
-$PATH_SCRIPT/test_pcp_server.sh
+test_pcp_server
 Get_Status $? "test_pcp_server            "
 
 test_ping_gws

@@ -7,7 +7,9 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_client_map_opcode \
                  test_pcp_client_peer_opcode \
                  test_flow_notify \
+                 test_pcp_cli_client \
                  test_ping_gws \
+                 test_pcp_server \
                  test_gw \
                  test_event_handler \
                  test_lifetime_renewal \
@@ -19,7 +21,7 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_msg \
                  test_server_reping
 
-noinst_HEADERS = test_macro.h
+noinst_HEADERS = test_macro.h test_pcp_server_helper.h
 
 TEST_PCP_SERVER_HELPER_SOURCES = test_pcp_server_helper.c ../test-server/pcp-server.c ../test-server/pcp-server.h
 
@@ -37,6 +39,10 @@ test_gw_LDFLAGS = -static
 test_ping_gws_SOURCES = test_server_discovery.c
 test_ping_gws_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_ping_gws_LDFLAGS = -static
+
+test_pcp_server_SOURCES = test_pcp_server.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_pcp_server_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_pcp_server_LDFLAGS = -static
 
 test_server_restart_SOURCES = test_server_restart.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_server_restart_LDADD = $(top_builddir)/lib/libpcpnatpmp.la -lpthread
@@ -69,6 +75,13 @@ test_pcp_client_db_LDFLAGS = -static
 test_pcp_api_SOURCES = test_pcp_api.c
 test_pcp_api_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_api_LDFLAGS = -static
+
+test_pcp_cli_client_SOURCES = test_pcp_cli_client.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+if PLATFORM_WINDOWS
+test_pcp_cli_client_SOURCES += ../win_utils/getopt.c ../win_utils/getopt_long.c ../lib/src/windows/pcp_gettimeofday.c
+endif
+test_pcp_cli_client_LDADD = $(top_builddir)/lib/libpcpnatpmp.la -lpthread
+test_pcp_cli_client_LDFLAGS = -static
 
 test_pcp_cli_nonce_SOURCES = test_pcp_cli_nonce.c
 if PLATFORM_WINDOWS
