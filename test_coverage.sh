@@ -2,14 +2,26 @@
 
 rm test_coverage.tmp -rf
 mkdir test_coverage.tmp
-#[ -f configure.ac.orig ] || cp configure.ac configure.ac.orig
-#sed -i 's/subdir-objects//' configure.ac
-./autogen.sh
 cd test_coverage.tmp
-CPPFLAGS="-DNDEBUG -DPCP_MAX_LOG_LEVEL=5" CFLAGS="-O0 -g" ../configure --enable-gcov
-make check
-rm cli-client/pcpnatpmpc-pcpnatpmpc.gcda
-lcov -c --directory . --output-file info && genhtml -o report/ info && cd .. && rm -rf test_coverage && mv test_coverage.tmp test_coverage
+cmake -S .. -B . \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_FLAGS="-DNDEBUG -DPCP_MAX_LOG_LEVEL=5 -O0 -g" \
+    -DENABLE_GCOV=ON
+cmake --build .
+ctest --output-on-failure
+
+# CLI binary is not executed during tests, so skip it in coverage collection.
+rm -f cli-client/CMakeFiles/pcpnatpmpc.dir/*.gcda
+
+lcov -c --directory . --output-file info
+lcov --ignore-errors unused --remove info \
+    '/usr/*' \
+    '*/tests/*' \
+    '*/test-server/*' \
+    '*/cli-client/*' \
+    '*/CMakeFiles/*' \
+    --output-file info.filtered
+genhtml -o report/ info.filtered && cd .. && rm -rf test_coverage && mv test_coverage.tmp test_coverage
 
 URL=test_coverage/report/index.html
 if [ -n "$BROWSER" ] && [ -x "$BROWSER" ]; then
