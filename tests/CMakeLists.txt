@@ -150,7 +150,7 @@ register_pcp_test (test_sock_ntop)
 register_pcp_test (test_version_negotiation)
 
 if (NOT WIN32)
-    if (WITH_EXPERIMENTAL)
+    if (WITH_EXPERIMENTAL AND TARGET pcpnatpmpc AND TARGET pcp-server)
         register_pcp_shell_test (test_get_dscp_sh test_get_dscp.sh)
         register_pcp_shell_test (test_flow_md_sh test_flow_md.sh)
     endif ()
