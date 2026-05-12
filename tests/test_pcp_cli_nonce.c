@@ -21,7 +21,19 @@
 #undef main
 
 int main(void) {
+    struct pcp_params params;
     uint32_t nonce_words_be[3];
+    char *argv[] = {"pcpnatpmpc",
+                    "--nonce",
+                    "00112233445566778899aabb",
+                    "-l",
+                    "120",
+                    "--internal",
+                    ":1234",
+                    "-d",
+                    "--server",
+                    "127.0.0.1:5351"};
+    int argc = sizeof(argv) / sizeof(argv[0]);
 
     TEST(parse_nonce_words_be(NULL, nonce_words_be) == 1);
     TEST(parse_nonce_words_be("1234abcd", nonce_words_be) == 1);
@@ -36,6 +48,15 @@ int main(void) {
     TEST(nonce_words_be[0] == htonl(0xaabbccdd));
     TEST(nonce_words_be[1] == htonl(0xeeff0011));
     TEST(nonce_words_be[2] == htonl(0x22334455));
+
+    optind = 0;
+    parse_params(&params, argc, argv);
+    TEST(params.has_nonce == 1);
+    TEST(params.opt_lifetime == 120);
+    TEST(params.has_mappeer_data == 1);
+    TEST(params.nonce_words_be[0] == htonl(0x00112233));
+    TEST(params.nonce_words_be[1] == htonl(0x44556677));
+    TEST(params.nonce_words_be[2] == htonl(0x8899aabb));
 
     return 0;
 }

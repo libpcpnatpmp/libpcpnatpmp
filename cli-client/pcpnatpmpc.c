@@ -263,14 +263,39 @@ const char usage_string[] =
 
 #undef NOSHORT
 #undef SHORT
+#define NOSHORT ((const char *)0)
+#define SHORT(a) #a
+#define SHORT_OPT(a, b, c, d, e) d(a);
+#define SHORT_OPT_REQARG(txt)                                                  \
+    if ((txt) != NULL) {                                                       \
+        *cur++ = (txt)[0];                                                     \
+        *cur++ = ':';                                                          \
+    }
+#define SHORT_OPT_NOARG(txt)                                                   \
+    if ((txt) != NULL) {                                                       \
+        *cur++ = (txt)[0];                                                     \
+    }
+
+static const char *get_short_opts_string(void) {
+    static char short_opts_string[64];
+    static int initialized = 0;
+
+    if (!initialized) {
+        char *cur = short_opts_string;
+
+        FOREACH_OPTION(SHORT_OPT, ARG_IGNORE, SHORT_OPT_REQARG,
+                       SHORT_OPT_NOARG);
+        *cur = '\0';
+        initialized = 1;
+    }
+
+    return short_opts_string;
+}
+
+#undef NOSHORT
+#undef SHORT
 #define NOSHORT ""
 #define SHORT(a) #a
-#define SHORT_OPT(a, b, c, d, e) a d
-#define SHORT_OPT_REQARG ":"
-#define SHORT_OPT_NOARG
-
-const char short_opts_string[] =
-    FOREACH_OPTION(SHORT_OPT, ARG_IGNORE, SHORT_OPT_REQARG, SHORT_OPT_NOARG);
 
 #define ENUM_OPTION(a, b, c, d, e) E_##b,
 
@@ -908,7 +933,7 @@ static void parse_params(struct pcp_params *p, int argc, char *argv[]) {
     }
 
     opterr = 0;
-    while ((c = getopt_long(argc, argv, short_opts_string, long_options,
+    while ((c = getopt_long(argc, argv, get_short_opts_string(), long_options,
                             &option_index)) != -1) {
 
         FOREACH_OPTION(PARSE_OPTION, ARG_IGNORE, ARG_IGNORE,
