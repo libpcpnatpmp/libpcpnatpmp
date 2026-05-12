@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 killall pcp-server
 rm -f /tmp/test_lf_rn

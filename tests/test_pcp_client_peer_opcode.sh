@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 pcp-server --ear 1 >/dev/null &
 PCP_SERVER_PID=$!

@@ -8,14 +8,14 @@ function (register_pcp_test target)
 endfunction ()
 
 if (NOT WIN32)
-    find_program (BASH_PROGRAM bash REQUIRED)
+    find_program (SH_PROGRAM sh REQUIRED)
 
     function (register_pcp_shell_test name script)
         add_test (
             NAME ${name}
             COMMAND ${CMAKE_COMMAND} -E env
                 "PATH=$<TARGET_FILE_DIR:pcpnatpmpc>:$<TARGET_FILE_DIR:pcp-server>:${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}"
-                ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/${script}
+                ${SH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/${script}
         )
         set_tests_properties (${name} PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}

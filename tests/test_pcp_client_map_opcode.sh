@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 killall pcp-server
 sleep 0.1

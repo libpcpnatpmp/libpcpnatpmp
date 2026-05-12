@@ -1,19 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 
-function Get_Status {
-if [ $1 -ne 0 ]
+Get_Status() {
+if [ "$1" -ne 0 ]
 then
-echo "$2 FAILED! Exit Status: $1" >> $CURRENT_DIR/test_results.txt
-echo -e "$2 \e[00;31mFAILED\e[00m Exit Status: $1" >> $CURRENT_DIR/TEMP.tmp
-echo -e "\e[00;31m---------------------------------------------------\e[00m "
-echo -e "\n\n $2 \e[00;31mFAILED\e[00m Exit Status: $1 \n\n "
-echo -e "\e[00;31m---------------------------------------------------\e[00m "
+echo "$2 FAILED! Exit Status: $1" >> "$CURRENT_DIR/test_results.txt"
+printf '%s \033[00;31mFAILED\033[00m Exit Status: %s\n' "$2" "$1" >> "$CURRENT_DIR/TEMP.tmp"
+printf '\033[00;31m---------------------------------------------------\033[00m \n'
+printf '\n\n %s \033[00;31mFAILED\033[00m Exit Status: %s \n\n \n' "$2" "$1"
+printf '\033[00;31m---------------------------------------------------\033[00m \n'
 else
-echo "$2 PASSED! Exit Status: $1" >> $CURRENT_DIR/test_results.txt
-echo -e "$2 \e[00;32mPASSED\e[00m Exit Status: $1" >> $CURRENT_DIR/TEMP.tmp
-echo -e "\e[00;32m---------------------------------------------------\e[00m "
-echo -e "\n\n $2 \e[00;32mPASSED\e[00m Exit Status: $1 \n\n "
-echo -e "\e[00;32m---------------------------------------------------\e[00m "
+echo "$2 PASSED! Exit Status: $1" >> "$CURRENT_DIR/test_results.txt"
+printf '%s \033[00;32mPASSED\033[00m Exit Status: %s\n' "$2" "$1" >> "$CURRENT_DIR/TEMP.tmp"
+printf '\033[00;32m---------------------------------------------------\033[00m \n'
+printf '\n\n %s \033[00;32mPASSED\033[00m Exit Status: %s \n\n \n' "$2" "$1"
+printf '\033[00;32m---------------------------------------------------\033[00m \n'
 fi
 return 0
 }
@@ -34,8 +34,8 @@ esac
 PATH_SCRIPT=tests
 PATH=$PATH:$BIN_PATH:$CURRENT_DIR/win_utils
 
-echo "" > $CURRENT_DIR/test_results.txt
-echo "" > $CURRENT_DIR/TEMP.tmp
+echo "" > "$CURRENT_DIR/test_results.txt"
+echo "" > "$CURRENT_DIR/TEMP.tmp"
 
 export PCP_USE_IPV6_SOCKET=0
 
@@ -99,9 +99,9 @@ Get_Status $? "test_pcp_server            "
 test_ping_gws
 Get_Status $? "test_ping_gws              "
 
-cat $CURRENT_DIR/TEMP.tmp
-rm $CURRENT_DIR/TEMP.tmp
+cat "$CURRENT_DIR/TEMP.tmp"
+rm "$CURRENT_DIR/TEMP.tmp"
 
-echo -e Testing ended, results in \'$CURRENT_DIR/test_results.txt\'
+printf "Testing ended, results in '%s/test_results.txt'\n" "$CURRENT_DIR"
 
 exit

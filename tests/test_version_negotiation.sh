@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 VERSION=${1:-2}
 
 if [ $VERSION -ge 3 ]; then

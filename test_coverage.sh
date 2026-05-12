@@ -1,4 +1,4 @@
-#/bin/sh
+#!/bin/sh
 
 rm test_coverage.tmp -rf
 mkdir test_coverage.tmp
@@ -12,6 +12,7 @@ rm cli-client/pcpnatpmpc-pcpnatpmpc.gcda
 lcov -c --directory . --output-file info && genhtml -o report/ info && cd .. && rm -rf test_coverage && mv test_coverage.tmp test_coverage
 
 URL=test_coverage/report/index.html
-[[ -x $BROWSER ]] && exec "$BROWSER" "$URL"
-path=$(which xdg-open || which gnome-open || which open) && exec "$path" "$URL"
-
+if [ -n "$BROWSER" ] && [ -x "$BROWSER" ]; then
+    exec "$BROWSER" "$URL"
+fi
+path=$(command -v xdg-open || command -v gnome-open || command -v open) && exec "$path" "$URL"
