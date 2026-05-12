@@ -665,7 +665,8 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
     }
 
     gettimeofday(&tod, NULL);
-    if (server->server_info.tv.tv_sec != 0 || server->server_info.tv.tv_usec != 0) {
+    if (server->server_info.tv.tv_sec != 0 ||
+        server->server_info.tv.tv_usec != 0) {
         if (timeval_subtract(&end_time, &server->timeout_time, &tod)) {
             pcp_test_server_stop(server);
             return 0;
@@ -698,8 +699,8 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
     ret = select(server->sockfd + 1, &read_fds, NULL, NULL, &wait_timeout);
 #endif
     if (ret <= 0) {
-        if (ret == 0 &&
-            (server->server_info.tv.tv_sec != 0 || server->server_info.tv.tv_usec != 0)) {
+        if (ret == 0 && (server->server_info.tv.tv_sec != 0 ||
+                         server->server_info.tv.tv_usec != 0)) {
             gettimeofday(&tod, NULL);
             if (timeval_comp(&tod, &server->timeout_time) >= 0) {
                 pcp_test_server_stop(server);
@@ -727,17 +728,15 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
 
         printf("PCP server: packet is %d bytes long\n", numbytes);
 
-        pcp_result_code =
-            printPCPreq(buf, numbytes, &opt_occurence,
-                        server->server_info.server_version,
-                        server->server_info.log_file);
+        pcp_result_code = printPCPreq(buf, numbytes, &opt_occurence,
+                                      server->server_info.server_version,
+                                      server->server_info.log_file);
 
-        create_response(
-            buf,
-            (server->server_info.default_result_code == 255)
-                ? pcp_result_code
-                : server->server_info.default_result_code,
-            &server->server_info);
+        create_response(buf,
+                        (server->server_info.default_result_code == 255)
+                            ? pcp_result_code
+                            : server->server_info.default_result_code,
+                        &server->server_info);
 
         sendto(server->sockfd, buf, numbytes, 0, (struct sockaddr *)&their_addr,
                addr_len);
@@ -760,8 +759,8 @@ int execPCPServer(const char *serverPort, const char *serverAddress,
                   const server_info_t *server_info) {
     pcp_test_server_t server;
 
-    if (pcp_test_server_start(&server, serverPort, serverAddress, server_info) !=
-        0) {
+    if (pcp_test_server_start(&server, serverPort, serverAddress,
+                              server_info) != 0) {
         return 1;
     }
 

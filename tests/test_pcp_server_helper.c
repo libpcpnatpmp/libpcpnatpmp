@@ -50,9 +50,9 @@ void test_pcp_server_config_init(test_pcp_server_config_t *config) {
     test_pcp_server_info_init(&config->server_info);
 }
 
-void test_pcp_server_sequence_init(
-    test_pcp_server_sequence_t *sequence,
-    const test_pcp_server_config_t *configs, size_t config_count) {
+void test_pcp_server_sequence_init(test_pcp_server_sequence_t *sequence,
+                                   const test_pcp_server_config_t *configs,
+                                   size_t config_count) {
     memset(sequence, 0, sizeof(*sequence));
     sequence->configs = configs;
     sequence->config_count = config_count;
@@ -125,8 +125,8 @@ int test_pcp_server_sequence_is_active(
     return sequence->active;
 }
 
-pcp_fstate_e test_pcp_wait_with_servers(
-    pcp_flow_t *flow, int timeout_ms, test_pcp_server_sequence_t *sequence) {
+pcp_fstate_e test_pcp_wait_with_servers(pcp_flow_t *flow, int timeout_ms,
+                                        test_pcp_server_sequence_t *sequence) {
     fd_set read_fds;
     int fdmax;
     struct timeval tout_end;

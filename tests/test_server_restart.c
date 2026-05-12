@@ -46,7 +46,8 @@ typedef struct server_thread_args {
     uint8_t second_server_requests;
 } server_thread_args_t;
 
-static void init_server_info(server_info_t *server_info, uint8_t end_after_recv) {
+static void init_server_info(server_info_t *server_info,
+                             uint8_t end_after_recv) {
     memset(server_info, 0, sizeof(*server_info));
     server_info->server_version = 2;
     server_info->default_result_code = 255;
@@ -109,7 +110,8 @@ static int run_scenario(uint8_t second_server_requests, int expect_success) {
     thread_args.second_server_requests = second_server_requests;
 
 #ifdef WIN32
-    thread_handle = CreateThread(NULL, 0, server_thread_main, &thread_args, 0, NULL);
+    thread_handle =
+        CreateThread(NULL, 0, server_thread_main, &thread_args, 0, NULL);
     TEST(thread_handle != NULL);
     Sleep(4000);
 #else

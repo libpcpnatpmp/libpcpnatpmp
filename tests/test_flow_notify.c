@@ -158,7 +158,8 @@ int main(int argc, char *argv[] UNUSED) {
     server_config.server_address = "0.0.0.0";
     server_config.server_info.default_result_code = 0;
     server_config.server_info.end_after_recv = 1;
-    inet_pton(AF_INET6, "::ffff:10.20.30.40", &server_config.server_info.ext_ip);
+    inet_pton(AF_INET6, "::ffff:10.20.30.40",
+              &server_config.server_info.ext_ip);
     test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
     test_sleep_ms(100);
 
@@ -195,7 +196,8 @@ int main(int argc, char *argv[] UNUSED) {
     server_config.server_address = "::1";
     server_config.server_info.default_result_code = 3;
     server_config.server_info.end_after_recv = 1;
-    inet_pton(AF_INET6, "::ffff:10.20.30.40", &server_config.server_info.ext_ip);
+    inet_pton(AF_INET6, "::ffff:10.20.30.40",
+              &server_config.server_info.ext_ip);
     test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
     test_sleep_ms(100);
 
