@@ -1,4 +1,4 @@
-AC_INIT([pcpnatpmp-client],[2.0],[aeon@cisco.com])
+AC_INIT([pcpnatpmp-client],[2.0.0],[aeon@cisco.com])
 AC_CANONICAL_TARGET
 AC_PREREQ([2.71])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign color-tests subdir-objects])

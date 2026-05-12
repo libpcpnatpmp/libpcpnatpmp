@@ -44,6 +44,11 @@ add_library (pcpnatpmp
     ${LIBPCP_INC_FILES}
 )
 
+set_target_properties (pcpnatpmp PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 0
+)
+
 if (WIN32)
     target_link_libraries (pcpnatpmp PUBLIC ws2_32.lib Iphlpapi.lib)
 endif ()

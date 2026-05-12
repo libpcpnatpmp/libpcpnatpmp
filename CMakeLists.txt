@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.14)
 
-project (pcpnatpmp-client)
+project (pcpnatpmp-client VERSION 2.0.0)
+
+enable_testing ()
 
 set (WITH_EXPERIMENTAL ON CACHE BOOL "Experimental extensions suppport")
 set (USE_IPV6_SOCKET ON CACHE BOOL "Use IPv6 socket")
