@@ -34,7 +34,7 @@ from scapy.layers.inet6 import IP6Field
 class Dict2Struct(object):
     def __init__(self, entries):
         entries = dict((v.replace(' ', '_').upper(), k) for k, v in entries.items())
-        self.__dict__.update(entries)
+        self.__dict__.update({k: v for k, v in entries.items() if not (k.startswith('__') and k.endswith('__'))})
 
 
 PCP_VERSIONS = {1: "v1",
