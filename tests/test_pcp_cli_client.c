@@ -61,7 +61,7 @@ run_cli_with_servers(int argc, char **argv,
     int elapsed_ms = 0;
 
     test_pcp_server_sequence_init(&sequence, configs, config_count);
-    test_sleep_ms(100);
+    test_sleep_ms(500);
     TEST(test_process_start(&process, PCP_CLI_CLIENT_EXE, argc, argv) == 0);
 
     while (!exited && elapsed_ms < 10000) {

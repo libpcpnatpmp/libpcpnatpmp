@@ -40,11 +40,13 @@
 #define DUP2 _dup2
 #define FD_CLOSE _close
 #define FILENO _fileno
+#define SOCK_CLOSE closesocket
 #else
 #define DUP dup
 #define DUP2 dup2
 #define FD_CLOSE close
 #define FILENO fileno
+#define SOCK_CLOSE close
 #endif
 
 typedef test_process_result_t server_run_result_t;
@@ -365,7 +367,11 @@ static void test_log_file_cases(void) {
 }
 
 static void send_malformed_packet(void) {
+#ifdef WIN32
+    SOCKET sockfd;
+#else
     int sockfd;
+#endif
     struct sockaddr_in server_addr;
     unsigned char payload[3] = {0, 0, 0};
 
@@ -380,7 +386,7 @@ static void send_malformed_packet(void) {
     TEST(sendto(sockfd, (const char *)payload, sizeof(payload), 0,
                 (struct sockaddr *)&server_addr,
                 sizeof(server_addr)) == (int)sizeof(payload));
-    FD_CLOSE(sockfd);
+    SOCK_CLOSE(sockfd);
 }
 
 static void test_malformed_packet(void) {
