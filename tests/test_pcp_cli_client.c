@@ -34,6 +34,10 @@ static int contains_string(const char *haystack, const char *needle) {
 
 static void build_server_arg(char *buffer, size_t buffer_size,
                              const char *address, const char *port) {
+    if (strchr(address, ':') != NULL && address[0] != '[') {
+        snprintf(buffer, buffer_size, "[%s]:%s", address, port);
+        return;
+    }
     snprintf(buffer, buffer_size, "%s:%s", address, port);
 }
 
@@ -320,12 +324,15 @@ static void test_ipv6_server_cases(void) {
     }
 
     {
-        char *argv[] = {
-            "pcpnatpmpc", "--pcp-version", "2",  "-s",        server_arg,
-            "-i",         "[::]:1234",     "-p", "[::1]:1234"};
+        char *argv[] = {"pcpnatpmpc", "--pcp-version",
+                        "2",          "-s",
+                        server_arg,   "-d",
+                        "-f",         "-i",
+                        "[::]:1234",  "-p",
+                        "[::1]:1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 0);
+        expect_exit_code(&result, 0);
         free_cli_run_result(&result);
     }
 
