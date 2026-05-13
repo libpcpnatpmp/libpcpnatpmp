@@ -32,6 +32,8 @@
 #include "default_config.h"
 #endif
 
+#include "pcp-server.h"
+
 #include "getopt.h"
 #include "pcp_socket.h"
 #include <ctype.h>
@@ -81,27 +83,12 @@
 #include "pcp_msg_structs.h"
 #include "pcp_utils.h"
 
-#define PCP_PORT "5351"
-#define PCP_TEST_MAX_VERSION 2
-
 #define MAX_LOG_FILE 64u
 
 typedef struct options_occur {
     int third_party_occur;
     int pfailure_occur;
 } options_occur_t;
-
-typedef struct server_info {
-    uint8_t server_version;
-    uint8_t end_after_recv;
-    uint8_t default_result_code;
-    struct in6_addr ext_ip;
-    uint8_t app_bit;
-    uint8_t ret_dscp;
-    char log_file[MAX_LOG_FILE];
-    struct timeval tv;
-    time_t epoch_time_start;
-} server_info_t;
 
 static void reset_option_occur(options_occur_t *opt_occ) {
 
@@ -613,23 +600,15 @@ static int create_response(char *request, int pcp_result_code,
     return 0;
 }
 
-static int execPCPServer(const char *serverPort, const char *serverAddress,
-                         const server_info_t *server_info) {
-    PCP_SOCKET sockfd;
-    int numbytes;
-    int pcp_result_code;
-    struct sockaddr_storage their_addr;
-    int execute = 1;
-    options_occur_t opt_occurence = {0, 0};
+int pcp_test_server_start(pcp_test_server_t *server, const char *serverPort,
+                          const char *serverAddress,
+                          const server_info_t *server_info) {
+    struct timeval tod;
 
-    char buf[PCP_MAX_LEN];
-    socklen_t addr_len = 0;
-    char s[INET6_ADDRSTRLEN];
-
-    struct timeval tod;          // store current time of the day
-    struct timeval timeout_time; // store expected timeout time
-
-    memset(buf, 0, sizeof(buf));
+    memset(server, 0, sizeof(*server));
+    server->server_info = *server_info;
+    server->remaining_messages =
+        server_info->end_after_recv ? server_info->end_after_recv : -1;
 
 #ifdef WIN32
     if (pcp_win_sock_startup()) {
@@ -637,55 +616,108 @@ static int execPCPServer(const char *serverPort, const char *serverAddress,
     }
 #endif // WIN32
 
-    // if number of messages server will receive was set
-    // use this number to control number of times while() cycle executes
-    // if end_after_recv was not set, cycle will run with execute = 1
-    if (server_info->end_after_recv != 0) {
-        execute = server_info->end_after_recv;
+    server->sockfd = createPCPsocket(serverPort, serverAddress);
+    gettimeofday(&tod, NULL);
+    server->timeout_time.tv_sec = tod.tv_sec + server_info->tv.tv_sec;
+    server->timeout_time.tv_usec = tod.tv_usec + server_info->tv.tv_usec;
+    server->timeout_time.tv_sec += server->timeout_time.tv_usec / 1000000;
+    server->timeout_time.tv_usec %= 1000000;
+    server->running = 1;
+    return 0;
+}
+
+int pcp_test_server_is_running(const pcp_test_server_t *server) {
+    return server->running;
+}
+
+void pcp_test_server_stop(pcp_test_server_t *server) {
+    if (!server->running) {
+        return;
     }
 
-    sockfd = createPCPsocket(serverPort, serverAddress);
+    printf("Closing sockfd \n");
+    CLOSE(server->sockfd);
+    server->running = 0;
+
+#ifdef WIN32
+    pcp_win_sock_cleanup();
+#endif // WIN32
+}
+
+int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
+    int numbytes;
+    int pcp_result_code;
+    struct sockaddr_storage their_addr;
+    options_occur_t opt_occurence = {0, 0};
+    char buf[PCP_MAX_LEN];
+    socklen_t addr_len = 0;
+    char s[INET6_ADDRSTRLEN];
+    struct timeval tod;
+    struct timeval wait_timeout;
+    struct timeval end_time;
+    fd_set read_fds;
+    int ret;
+
+    memset(buf, 0, sizeof(buf));
+
+    if (!server->running) {
+        return 0;
+    }
 
     gettimeofday(&tod, NULL);
-    timeout_time.tv_sec = tod.tv_sec + server_info->tv.tv_sec;
-    timeout_time.tv_usec = tod.tv_usec + server_info->tv.tv_usec;
-
-    while (execute) {
-        time_t recvtime;
-
-        if (server_info->end_after_recv != 0) {
-            execute--;
+    if (server->server_info.tv.tv_sec != 0 ||
+        server->server_info.tv.tv_usec != 0) {
+        if (timeval_subtract(&end_time, &server->timeout_time, &tod)) {
+            pcp_test_server_stop(server);
+            return 0;
         }
+    } else {
+        end_time.tv_sec = timeout_ms < 0 ? 3600 : timeout_ms / 1000;
+        end_time.tv_usec = timeout_ms < 0 ? 0 : (timeout_ms % 1000) * 1000;
+    }
 
-        recvtime = 0;
+    if (timeout_ms >= 0) {
+        struct timeval requested_timeout;
+        requested_timeout.tv_sec = timeout_ms / 1000;
+        requested_timeout.tv_usec = (timeout_ms % 1000) * 1000;
+        if (timeval_comp(&requested_timeout, &end_time) < 0) {
+            end_time = requested_timeout;
+        }
+    }
 
-        if (server_info->tv.tv_sec != 0 || server_info->tv.tv_usec != 0) {
-            struct timeval end_time;
-            PI_TIMEOUT_STRUCT pi_timeout;
+    wait_timeout = end_time;
+    FD_ZERO(&read_fds);
+    FD_SET(server->sockfd, &read_fds);
+
+    printf("###############################################\n");
+    printf("### PCP test server: waiting to recvfrom... ###\n");
+    printf("###############################################\n");
+
+#ifdef WIN32
+    ret = select(0, &read_fds, NULL, NULL, &wait_timeout);
+#else
+    ret = select(server->sockfd + 1, &read_fds, NULL, NULL, &wait_timeout);
+#endif
+    if (ret <= 0) {
+        if (ret == 0 && (server->server_info.tv.tv_sec != 0 ||
+                         server->server_info.tv.tv_usec != 0)) {
             gettimeofday(&tod, NULL);
-
-            if (timeval_subtract(&end_time, &timeout_time,
-                                 &tod)) { // LCOV_EXCL_START
-                end_time.tv_sec = 0;
-                end_time.tv_usec = 0;
-                // LCOV_EXCL_STOP
+            if (timeval_comp(&tod, &server->timeout_time) >= 0) {
+                pcp_test_server_stop(server);
             }
-
-            SET_PI_TIMEOUT(pi_timeout, end_time);
-            setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&pi_timeout,
-                       sizeof(pi_timeout));
         }
+        return ret < 0 ? -1 : 0;
+    }
 
-        printf("###############################################\n");
-        printf("### PCP test server: waiting to recvfrom... ###\n");
-        printf("###############################################\n");
+    {
+        time_t recvtime = 0;
 
         addr_len = sizeof their_addr;
-        if ((numbytes = recvfrom(sockfd, buf, PCP_MAX_LEN - 1, 0,
+        if ((numbytes = recvfrom(server->sockfd, buf, PCP_MAX_LEN - 1, 0,
                                  (struct sockaddr *)&their_addr, &addr_len)) ==
             PCP_SOCKET_ERROR) { // LCOV_EXCL_START
             perror("recvfrom");
-            exit(1);
+            return -1;
         } // LCOV_EXCL_STOP
         time(&recvtime);
 
@@ -696,216 +728,48 @@ static int execPCPServer(const char *serverPort, const char *serverAddress,
 
         printf("PCP server: packet is %d bytes long\n", numbytes);
 
-        pcp_result_code =
-            printPCPreq(buf, numbytes, &opt_occurence,
-                        server_info->server_version, server_info->log_file);
+        pcp_result_code = printPCPreq(buf, numbytes, &opt_occurence,
+                                      server->server_info.server_version,
+                                      server->server_info.log_file);
 
-        // check if default result code should be returned
-        // or the result code that was retrieved after message parsing
         create_response(buf,
-                        (server_info->default_result_code == 255)
+                        (server->server_info.default_result_code == 255)
                             ? pcp_result_code
-                            : server_info->default_result_code,
-                        server_info);
+                            : server->server_info.default_result_code,
+                        &server->server_info);
 
-        // send response to client
-        sendto(sockfd, buf, numbytes, 0, (struct sockaddr *)&their_addr,
+        sendto(server->sockfd, buf, numbytes, 0, (struct sockaddr *)&their_addr,
                addr_len);
 
         reset_option_occur(&opt_occurence);
         printf("\n");
     }
 
-    printf("Closing sockfd \n");
-    CLOSE(sockfd);
-
-#ifdef WIN32
-    pcp_win_sock_cleanup();
-#endif // WIN32
-
-    return 0;
-}
-
-static void print_usage(void) {
-
-    printf("\n");
-    printf("Usage: \n");
-    printf("-h, --help \t  Display this help \n");
-    printf("-v \t\t  Set server version.\n");
-    printf("   \t\t   Only versions 1 and 2 are supported for now.\n");
-    printf("   \t\t   Default: By default server processes both versions.\n");
-    printf("-p \t\t  Lets you set the port on which server listens.\n");
-    printf("   \t\t   Default: 5351.\n");
-    printf("-r \t\t  Set result code that will be returned by server \n"
-           "   \t\t   to every request no matter what.\n");
-    printf("   \t\t   Possible values from range {0..13} \n");
-    printf("--ear #num \t  Terminates server after #num requests have been \n"
-           "          \t   received and responded to. \n");
-    printf("--ip \t\t  Sets IP address on which server is listening.\n");
-    printf("     \t\t   Default: 0.0.0.0 (listening on all interfaces)\n");
-    printf("--timeout \t  Set timeout time of the server in miliseconds.\n");
-    printf("     \t\t   Default 0 (Running indefinitely)\n");
-    printf("--app-bit \t  set application bit in SADSCP opcode response\n");
-    printf("--ret-dscp\t  return DSCP value for SADSCP opcode\n");
-    printf("--log-file \t  Log Requests to file \n");
-}
-
-#ifndef no_argument
-#define no_argument 0
-#endif
-
-#ifndef required_argument
-#define required_argument 1
-#endif
-
-int main(int argc, char *argv[]) {
-
-    const char *port = PCP_PORT;
-    int test_port;
-    uint8_t pcp_version = PCP_TEST_MAX_VERSION;
-    uint8_t end_after_recv = 0;
-    uint8_t default_result_code = 255;
-#ifdef WIN32
-    long timeout_us = 0;
-#else
-    suseconds_t timeout_us = 0;
-#endif
-    server_info_t server_info_storage;
-    const char *server_ip = "0.0.0.0";
-    uint8_t app_bit = 0;
-    uint8_t ret_dscp = 0;
-    char *log_file = NULL;
-
-    {
-        int c;
-        int option_index = 0;
-
-        static struct option long_options[] = {
-            {"ear", required_argument, 0, 0},
-            {"help", no_argument, 0, 0},
-            {"ip", required_argument, 0, 0},
-            {"ext-ip", required_argument, 0, 0},
-            {"timeout", required_argument, 0, 0},
-            {"app-bit", no_argument, 0, 0},
-            {"ret-dscp", required_argument, 0, 0},
-            {"log-file", required_argument, 0, 0},
-            {0, 0, 0, 0}};
-
-        opterr = 0;
-        while ((c = getopt_long(argc, argv, "hr:v:p:", long_options,
-                                &option_index)) != -1) {
-            switch (c) {
-            // assign values for long options
-            case 0:
-                if (!long_options[option_index].name) {
-                    break;
-                }
-
-                if (!strcmp(long_options[option_index].name, "ear"))
-                    end_after_recv = (uint8_t)atoi(optarg);
-
-                if (!strcmp(long_options[option_index].name, "timeout")) {
-                    int temp_timeout = atoi(optarg);
-                    if (temp_timeout < 0) {
-                        printf("Value provided for timeout was negative %d. "
-                               "Please provide correct value.\n",
-                               temp_timeout);
-                        exit(1);
-                    } else {
-#ifdef WIN32
-                        timeout_us = (long)atoi(optarg);
-#else
-                        timeout_us = (suseconds_t)atoi(optarg);
-#endif
-                    }
-                }
-
-                if (!strcmp(long_options[option_index].name, "app-bit")) {
-                    app_bit = 1;
-                }
-
-                if (!strcmp(long_options[option_index].name, "ret-dscp")) {
-                    ret_dscp = (uint8_t)atoi(optarg);
-                }
-
-                if (!strcmp(long_options[option_index].name, "log-file")) {
-                    log_file = optarg;
-                }
-
-                if (!strcmp(long_options[option_index].name, "ip"))
-                    server_ip = optarg;
-
-                if (!strcmp(long_options[option_index].name, "ext-ip")) {
-                    inet_pton(AF_INET6, optarg, &server_info_storage.ext_ip);
-                }
-
-                if (!strcmp(long_options[option_index].name, "help")) {
-                    print_usage();
-                    exit(1);
-                }
-
-                break;
-            case 'h':
-                print_usage();
-                exit(1);
-                break;
-            case 'p':
-                test_port = atoi(optarg);
-                if ((test_port < 1) || (test_port > 65535)) {
-                    printf("Bad value for option -p %d \n", test_port);
-                    printf("Port value can be in range 1-65535. \n");
-                    printf("Default value will be used. \n");
-                } else {
-                    port = optarg;
-                }
-                break;
-            case 'r':
-                default_result_code = (uint8_t)atoi(optarg);
-                if (default_result_code > 13 && default_result_code != 255) {
-                    printf("Unsupported  RESULT CODE %d (acceptable values "
-                           "0 <= result_code <= 13 or result_code == 255)\n",
-                           default_result_code);
-                    exit(1);
-                }
-                break;
-            case 'v':
-                pcp_version = (uint8_t)atoi(optarg);
-                if (pcp_version < 1 || pcp_version > 2) {
-                    printf("Version %d is not supported! \n", pcp_version);
-                    exit(1);
-                }
-                break;
-            case '?':
-                if (isprint(optopt))
-                    fprintf(stderr, "Unknown option `-%c'.\n", optopt);
-                else
-                    fprintf(stderr, "Unknown option character `\\x%x'.\n",
-                            optopt);
-                print_usage();
-                exit(1);
-            default: // LCOV_EXCL_START
-                print_usage();
-                exit(1);
-                break; // LCOV_EXCL_STOP
-            }
+    if (server->remaining_messages > 0) {
+        server->remaining_messages--;
+        if (server->remaining_messages == 0) {
+            pcp_test_server_stop(server);
         }
     }
 
-    server_info_storage.default_result_code = default_result_code;
-    server_info_storage.end_after_recv = end_after_recv;
-    server_info_storage.server_version = pcp_version;
-    server_info_storage.tv.tv_sec = timeout_us / 1000;
-    server_info_storage.tv.tv_usec = (timeout_us % 1000) * 1000;
-    server_info_storage.epoch_time_start = time(NULL);
-    server_info_storage.app_bit = app_bit;
-    server_info_storage.ret_dscp = ret_dscp;
-    if (log_file != NULL) {
-        memcpy(&(server_info_storage.log_file[0]), log_file,
-               min(strlen(log_file) + 1, MAX_LOG_FILE));
-    } else {
-        server_info_storage.log_file[0] = 0;
+    return 1;
+}
+
+int execPCPServer(const char *serverPort, const char *serverAddress,
+                  const server_info_t *server_info) {
+    pcp_test_server_t server;
+
+    if (pcp_test_server_start(&server, serverPort, serverAddress,
+                              server_info) != 0) {
+        return 1;
     }
 
-    printf("Server listening on %s:%s \n", server_ip, port);
-    return execPCPServer(port, server_ip, &server_info_storage);
+    while (pcp_test_server_is_running(&server)) {
+        if (pcp_test_server_pulse(&server, -1) < 0) {
+            pcp_test_server_stop(&server);
+            return 1;
+        }
+    }
+
+    return 0;
 }

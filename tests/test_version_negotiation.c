@@ -28,6 +28,8 @@
 
 #include "pcpnatpmp.h"
 
+#include "test_pcp_server_helper.h"
+
 #include "pcp_client_db.h"
 #include "pcp_socket.h"
 #include "test_macro.h"
@@ -45,17 +47,21 @@ int main(int argc, char *argv[]) {
     pcp_flow_info_t *flow_info = NULL;
     size_t flow_count;
     pcp_ctx_t *ctx;
+    test_pcp_server_sequence_t server_sequence;
+    test_pcp_server_config_t server_config;
 
     PD_SOCKET_STARTUP();
     version = (argc == 2) ? (uint8_t)atoi(argv[1]) : PCP_MAX_SUPPORTED_VERSION;
 
     pcp_log_level = 0;
 
-    if (argc != 2) { // LCOV_EXCL_START
-        printf("Invalid number of arguments.\n");
-        printf("This test takes only one argument, PCP version number.\n");
-        return -1;
-    } // LCOV_EXCL_STOP
+    test_pcp_server_config_init(&server_config);
+    server_config.server_port = "5351";
+    server_config.server_address = "0.0.0.0";
+    server_config.server_info.server_version = 1;
+    server_config.server_info.end_after_recv = 2;
+    test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
+    test_sleep_ms(100);
 
     printf("\n");
     fprintf(stdout, "###########################################\n");
@@ -76,7 +82,8 @@ int main(int argc, char *argv[]) {
                         (struct sockaddr *)&destination,
                         (struct sockaddr *)&ext, protocol, lifetime, NULL);
 
-    TEST(pcp_wait(flow, 2000, 0) == pcp_state_succeeded);
+    TEST(test_pcp_wait_with_servers(flow, 2000, &server_sequence) ==
+         pcp_state_succeeded);
     flow_info = pcp_flow_get_info(flow, &flow_count);
     TEST(flow_info);
     printf("Flow result code %d \n", flow_info->pcp_result_code);
@@ -90,5 +97,6 @@ int main(int argc, char *argv[]) {
 
     PD_SOCKET_CLEANUP();
     pcp_terminate(ctx, 0);
+    test_pcp_server_sequence_stop(&server_sequence);
     return 0;
 }

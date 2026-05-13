@@ -1,19 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 
-function Get_Status {
-if [ $1 -ne 0 ]
+Get_Status() {
+if [ "$1" -ne 0 ]
 then
-echo "$2 FAILED! Exit Status: $1" >> $CURRENT_DIR/test_results.txt
-echo -e "$2 \e[00;31mFAILED\e[00m Exit Status: $1" >> $CURRENT_DIR/TEMP.tmp
-echo -e "\e[00;31m---------------------------------------------------\e[00m "
-echo -e "\n\n $2 \e[00;31mFAILED\e[00m Exit Status: $1 \n\n "
-echo -e "\e[00;31m---------------------------------------------------\e[00m "
+echo "$2 FAILED! Exit Status: $1" >> "$CURRENT_DIR/test_results.txt"
+printf '%s \033[00;31mFAILED\033[00m Exit Status: %s\n' "$2" "$1" >> "$CURRENT_DIR/TEMP.tmp"
+printf '\033[00;31m---------------------------------------------------\033[00m \n'
+printf '\n\n %s \033[00;31mFAILED\033[00m Exit Status: %s \n\n \n' "$2" "$1"
+printf '\033[00;31m---------------------------------------------------\033[00m \n'
 else
-echo "$2 PASSED! Exit Status: $1" >> $CURRENT_DIR/test_results.txt
-echo -e "$2 \e[00;32mPASSED\e[00m Exit Status: $1" >> $CURRENT_DIR/TEMP.tmp
-echo -e "\e[00;32m---------------------------------------------------\e[00m "
-echo -e "\n\n $2 \e[00;32mPASSED\e[00m Exit Status: $1 \n\n "
-echo -e "\e[00;32m---------------------------------------------------\e[00m "
+echo "$2 PASSED! Exit Status: $1" >> "$CURRENT_DIR/test_results.txt"
+printf '%s \033[00;32mPASSED\033[00m Exit Status: %s\n' "$2" "$1" >> "$CURRENT_DIR/TEMP.tmp"
+printf '\033[00;32m---------------------------------------------------\033[00m \n'
+printf '\n\n %s \033[00;32mPASSED\033[00m Exit Status: %s \n\n \n' "$2" "$1"
+printf '\033[00;32m---------------------------------------------------\033[00m \n'
 fi
 return 0
 }
@@ -34,25 +34,22 @@ esac
 PATH_SCRIPT=tests
 PATH=$PATH:$BIN_PATH:$CURRENT_DIR/win_utils
 
-echo "" > $CURRENT_DIR/test_results.txt
-echo "" > $CURRENT_DIR/TEMP.tmp
+echo "" > "$CURRENT_DIR/test_results.txt"
+echo "" > "$CURRENT_DIR/TEMP.tmp"
 
 export PCP_USE_IPV6_SOCKET=0
 
-$PATH_SCRIPT/test_flow_notify.sh
+test_flow_notify
 Get_Status $? "test_flow_notify           "
 
-$PATH_SCRIPT/test_version_negotiation.sh
+test_version_negotiation 2
 Get_Status $? "test_version_negotiation   "
 
-$PATH_SCRIPT/test_pcp_client_map_opcode.sh
+test_pcp_client_map_opcode
 Get_Status $? "test_pcp_client_map_opcode "
 
-$PATH_SCRIPT/test_pcp_client_peer_opcode.sh
+test_pcp_client_peer_opcode
 Get_Status $? "test_pcp_client_peer_opcode"
-
-$PATH_SCRIPT/test_server_restart.sh
-Get_Status $? "test_server_restart        "
 
 $PATH_SCRIPT/test_get_dscp.sh
 Get_Status $? "test_get_dscp              "
@@ -60,10 +57,10 @@ Get_Status $? "test_get_dscp              "
 $PATH_SCRIPT/test_flow_md.sh
 Get_Status $? "test_flow_md               "
 
-$PATH_SCRIPT/test_lifetime_renewal.sh
+test_lifetime_renewal
 Get_Status $? "test_lifetime_renewal      "
 
-$PATH_SCRIPT/test_server_reping.sh
+test_server_reping
 Get_Status $? "test_server_reping         "
 
 test_event_handler
@@ -87,21 +84,21 @@ Get_Status $? "test_pcp_logger            "
 test_pcp_msg
 Get_Status $? "test_pcp_msg               "
 
-$PATH_SCRIPT/test_server_reping.sh
-Get_Status $? "test_server_reping         "
+test_server_restart
+Get_Status $? "test_server_restart        "
 
-$PATH_SCRIPT/test_pcp_cli_client.sh
+test_pcp_cli_client
 Get_Status $? "test_pcp_cli_client        "
 
-$PATH_SCRIPT/test_pcp_server.sh
+test_pcp_server
 Get_Status $? "test_pcp_server            "
 
 test_ping_gws
 Get_Status $? "test_ping_gws              "
 
-cat $CURRENT_DIR/TEMP.tmp
-rm $CURRENT_DIR/TEMP.tmp
+cat "$CURRENT_DIR/TEMP.tmp"
+rm "$CURRENT_DIR/TEMP.tmp"
 
-echo -e Testing ended, results in \'$CURRENT_DIR/test_results.txt\'
+printf "Testing ended, results in '%s/test_results.txt'\n" "$CURRENT_DIR"
 
 exit

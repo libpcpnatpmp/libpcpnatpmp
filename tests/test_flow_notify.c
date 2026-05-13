@@ -35,6 +35,8 @@
 
 #include "pcpnatpmp.h"
 
+#include "test_pcp_server_helper.h"
+
 #include "pcp_socket.h"
 #include "pcp_utils.h"
 #include "test_macro.h"
@@ -84,7 +86,7 @@ static void notify_cb_2(pcp_flow_t *f, struct sockaddr *src_addr,
     status = 1;
 }
 
-static int select_loop(pcp_ctx_t *ctx) {
+static int select_loop(pcp_ctx_t *ctx, test_pcp_server_sequence_t *sequence) {
     fd_set read_fds;
     int fdmax = 0;
     struct timeval tout_end;
@@ -105,11 +107,26 @@ static int select_loop(pcp_ctx_t *ctx) {
                ((tout_select.tv_sec == 0) && (tout_select.tv_usec == 0)) ||
                (tout_select.tv_sec < 0)));
 
+        if (sequence && test_pcp_server_sequence_pulse(sequence, 0) < 0) {
+            return 1;
+        }
         // process all events and get timeout value for next select
         pcp_pulse(ctx, &tout_select);
+        if (sequence && test_pcp_server_sequence_pulse(sequence, 0) < 0) {
+            return 1;
+        }
 
         if (status == 1) {
             return 0;
+        }
+
+        if (sequence && test_pcp_server_sequence_is_active(sequence)) {
+            struct timeval server_slice;
+            server_slice.tv_sec = 0;
+            server_slice.tv_usec = 100000;
+            if (timeval_comp(&server_slice, &tout_select) < 0) {
+                tout_select = server_slice;
+            }
         }
 
         FD_ZERO(&read_fds);
@@ -129,10 +146,23 @@ int main(int argc, char *argv[] UNUSED) {
     uint8_t protocol = 6;
     uint32_t lifetime = 100;
     pcp_ctx_t *ctx;
+    test_pcp_server_sequence_t server_sequence;
+    test_pcp_server_config_t server_config;
 
     PD_SOCKET_STARTUP();
 
     pcp_log_level = argc > 1 ? PCP_LOGLVL_DEBUG : 1;
+
+    test_pcp_server_config_init(&server_config);
+    server_config.server_port = "5351";
+    server_config.server_address = "0.0.0.0";
+    server_config.server_info.default_result_code = 0;
+    server_config.server_info.end_after_recv = 1;
+    inet_pton(AF_INET6, "::ffff:10.20.30.40",
+              &server_config.server_info.ext_ip);
+    test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
+    test_sleep_ms(100);
+
     ctx = pcp_init(0, NULL);
 
     pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2);
@@ -154,12 +184,23 @@ int main(int argc, char *argv[] UNUSED) {
                         (struct sockaddr *)&destination,
                         (struct sockaddr *)&ext, protocol, lifetime, ctx);
 
-    ret = select_loop(ctx);
+    ret = select_loop(ctx, &server_sequence);
 
     pcp_terminate(ctx, 0);
-    sleep(1);
+    test_pcp_server_sequence_stop(&server_sequence);
+    test_sleep_ms(100);
 
 #ifdef PCP_USE_IPV6_SOCKET
+    test_pcp_server_config_init(&server_config);
+    server_config.server_port = "5351";
+    server_config.server_address = "::1";
+    server_config.server_info.default_result_code = 3;
+    server_config.server_info.end_after_recv = 1;
+    inet_pton(AF_INET6, "::ffff:10.20.30.40",
+              &server_config.server_info.ext_ip);
+    test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
+    test_sleep_ms(100);
+
     ctx = pcp_init(0, NULL);
     pcp_add_server(ctx, Sock_pton("[::1]:5351"), 2);
 
@@ -175,8 +216,9 @@ int main(int argc, char *argv[] UNUSED) {
                         (struct sockaddr *)&destination,
                         (struct sockaddr *)&ext, protocol, lifetime, ctx);
 
-    ret = ret || select_loop(ctx);
+    ret = ret || select_loop(ctx, &server_sequence);
     pcp_terminate(ctx, 0);
+    test_pcp_server_sequence_stop(&server_sequence);
 #endif
 
     PD_SOCKET_CLEANUP();

@@ -1,4 +1,5 @@
 set (PCP_CLIENT_SRC
+    pcp_cli_nonce.c
     pcpnatpmpc.c
 )
 
@@ -28,3 +29,7 @@ if (WIN32)
         ../win_utils
     )
 endif ()
+
+install (TARGETS pcpnatpmpc
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)

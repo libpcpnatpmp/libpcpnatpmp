@@ -90,3 +90,41 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Local build and coverage artifacts
+build*/
+test_coverage/
+**/.deps/
+**/.libs/
+**/.dirstamp
+*.gcda
+*.gcno
+*.trs
+/config.h
+
+# Generated autotools outputs in this repository
+/Makefile
+/lib/Makefile
+/cli-client/Makefile
+/test-server/Makefile
+/tests/Makefile
+/test-driver
+/configure~
+
+# Generated test binaries
+/tests/test_*
+!/tests/test_*.c
+!/tests/test_*.h
+!/tests/test_*.sh
+!/tests/test_*.md
+
+# Keep repository source directories trackable
+!/lib/
+!/lib/CMakeLists.txt
+!/lib/*.pc.in
+!/lib/*.cmake.in
+!/lib/include/
+!/lib/include/**
+!/lib/src/
+!/lib/src/**/*.c
+!/lib/src/**/*.h
