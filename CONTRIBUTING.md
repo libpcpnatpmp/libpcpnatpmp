@@ -5,6 +5,7 @@ Thanks for contributing.
 ## Commit Message Convention
 
 This repository uses Conventional Commits for new contributions.
+Pull requests are validated in CI with commitlint.
 
 Use the format:
 

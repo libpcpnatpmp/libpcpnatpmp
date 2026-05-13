@@ -1,5 +1,7 @@
 name: clang-format Check
-on: [push, pull_request]
+on:
+  pull_request:
+    branches: [ "master" ]
 jobs:
   formatting-check:
     name: Formatting Check
