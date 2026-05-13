@@ -59,33 +59,69 @@ run_cli_with_servers(int argc, char **argv,
                      const test_pcp_server_config_t *configs,
                      size_t config_count) {
     cli_run_result_t result;
-    test_process_t process;
-    test_pcp_server_sequence_t sequence;
-    int exited = 0;
-    int exit_code = -1;
-    int elapsed_ms = 0;
+    test_process_t servers[2];
+    size_t i;
 
-    test_pcp_server_sequence_init(&sequence, configs, config_count);
-    test_sleep_ms(500);
-    TEST(test_process_start(&process, PCP_CLI_CLIENT_EXE, argc, argv) == 0);
+    TEST(config_count <= (sizeof(servers) / sizeof(servers[0])));
 
-    while (!exited && elapsed_ms < 10000) {
-        TEST(test_process_try_wait(&process, &exited, &exit_code) == 0);
-        if (exited) {
-            break;
+    memset(servers, 0, sizeof(servers));
+    for (i = 0; i < config_count; i++) {
+        char version_buf[8];
+        char result_code_buf[8];
+        char ear_buf[8];
+        char timeout_buf[16];
+        char *server_argv[16];
+        int server_argc = 0;
+        int server_timeout_ms;
+        int server_start_delay_ms;
+
+        server_start_delay_ms =
+            configs[i].start_delay_ms > 500 ? configs[i].start_delay_ms : 500;
+        server_timeout_ms = configs[i].start_delay_ms + 3000;
+        if (server_timeout_ms < 3000) {
+            server_timeout_ms = 3000;
         }
 
-        if (test_pcp_server_sequence_is_active(&sequence)) {
-            TEST(test_pcp_server_sequence_pulse(&sequence, 50) >= 0);
-        } else {
-            test_sleep_ms(50);
+        snprintf(version_buf, sizeof(version_buf), "%u",
+                 configs[i].server_info.server_version);
+        snprintf(result_code_buf, sizeof(result_code_buf), "%u",
+                 configs[i].server_info.default_result_code);
+        snprintf(ear_buf, sizeof(ear_buf), "%u",
+                 configs[i].server_info.end_after_recv);
+        snprintf(timeout_buf, sizeof(timeout_buf), "%d", server_timeout_ms);
+
+        server_argv[server_argc++] = "pcp-server";
+        if (configs[i].server_port != NULL) {
+            server_argv[server_argc++] = "-p";
+            server_argv[server_argc++] = (char *)configs[i].server_port;
         }
-        elapsed_ms += 50;
+        if (configs[i].server_address != NULL) {
+            server_argv[server_argc++] = "--ip";
+            server_argv[server_argc++] = (char *)configs[i].server_address;
+        }
+        server_argv[server_argc++] = "-v";
+        server_argv[server_argc++] = version_buf;
+        server_argv[server_argc++] = "-r";
+        server_argv[server_argc++] = result_code_buf;
+        if (configs[i].server_info.end_after_recv != 0) {
+            server_argv[server_argc++] = "--ear";
+            server_argv[server_argc++] = ear_buf;
+        }
+        server_argv[server_argc++] = "--timeout";
+        server_argv[server_argc++] = timeout_buf;
+
+        TEST(test_process_start(&servers[i], PCP_TEST_SERVER_EXE, server_argc,
+                                server_argv) == 0);
+        test_sleep_ms(server_start_delay_ms);
     }
 
-    TEST(exited);
-    TEST(test_process_finish(&process, &result) == 0);
-    test_pcp_server_sequence_stop(&sequence);
+    result = run_cli(argc, argv);
+
+    for (i = 0; i < config_count; i++) {
+        test_process_result_t server_result;
+        TEST(test_process_finish(&servers[i], &server_result) == 0);
+        test_process_result_free(&server_result);
+    }
 
     return result;
 }

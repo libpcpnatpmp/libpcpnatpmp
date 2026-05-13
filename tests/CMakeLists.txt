@@ -60,6 +60,7 @@ set (TEST_PCP_CLI_CLIENT_SOURCES
 )
 add_executable (test_pcp_cli_client ${TEST_PCP_CLI_CLIENT_SOURCES})
 add_dependencies (test_pcp_cli_client pcpnatpmpc)
+add_dependencies (test_pcp_cli_client pcp-server)
 add_executable (test_pcp_client_db test_pcp_client_db.c)
 set (TEST_PCP_CLIENT_MAP_OPCODE_SOURCES
     test_pcp_client_map_opcode.c
@@ -121,6 +122,7 @@ target_link_libraries (test_version_negotiation pcpnatpmp)
 
 target_compile_definitions (test_pcp_cli_client PRIVATE
     PCP_CLI_CLIENT_EXE=\"$<TARGET_FILE:pcpnatpmpc>\"
+    PCP_TEST_SERVER_EXE=\"$<TARGET_FILE:pcp-server>\"
 )
 target_compile_definitions (test_pcp_cli_nonce PRIVATE
     PCP_CLI_CLIENT_EXE=\"$<TARGET_FILE:pcpnatpmpc>\"
