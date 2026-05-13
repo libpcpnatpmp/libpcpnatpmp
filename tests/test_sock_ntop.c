@@ -36,21 +36,21 @@ int main(void) {
 
     PD_SOCKET_STARTUP();
     TEST(0 == sock_pton("[::1]:1234", (struct sockaddr *)&sa));
-    TEST(strcmp(
-             Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)),
-             "[::1]:1234") == 0);
+    TEST(strcmp(Sock_ntop((struct sockaddr *)&sa,
+                          (socklen_t)SA_LEN((struct sockaddr *)&sa)),
+                "[::1]:1234") == 0);
     TEST(0 == sock_pton("::1", (struct sockaddr *)&sa));
-    TEST(strcmp(
-             Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)),
-             "::1") == 0);
+    TEST(strcmp(Sock_ntop((struct sockaddr *)&sa,
+                          (socklen_t)SA_LEN((struct sockaddr *)&sa)),
+                "::1") == 0);
     TEST(0 == sock_pton("10.250.22.11:1234", (struct sockaddr *)&sa));
-    TEST(strcmp(
-             Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)),
-             "10.250.22.11:1234") == 0);
+    TEST(strcmp(Sock_ntop((struct sockaddr *)&sa,
+                          (socklen_t)SA_LEN((struct sockaddr *)&sa)),
+                "10.250.22.11:1234") == 0);
     TEST(0 == sock_pton("10.250.22.11", (struct sockaddr *)&sa));
-    TEST(strcmp(
-             Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)),
-             "10.250.22.11") == 0);
+    TEST(strcmp(Sock_ntop((struct sockaddr *)&sa,
+                          (socklen_t)SA_LEN((struct sockaddr *)&sa)),
+                "10.250.22.11") == 0);
     TEST(-2 == sock_pton("10.10.250.22.11:1234", (struct sockaddr *)&sa));
     TEST(-2 == sock_pton("10.10.250.22:11:1234", (struct sockaddr *)&sa));
     TEST(-2 == sock_pton("10.10.250d.22.11:1234", (struct sockaddr *)&sa));
@@ -66,17 +66,17 @@ int main(void) {
     TEST(-1 == sock_pton(NULL, NULL));
     sa.ss_family = AF_UNIX;
 #ifndef WIN32 // Unix sockets not supported on Windows
-    TEST(NULL !=
-         Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)))
+    TEST(NULL != Sock_ntop((struct sockaddr *)&sa,
+                           (socklen_t)SA_LEN((struct sockaddr *)&sa)))
     ((struct sockaddr_un *)&sa)->sun_path[0] = 0;
 #endif
-    TEST(NULL !=
-         Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)))
+    TEST(NULL != Sock_ntop((struct sockaddr *)&sa,
+                           (socklen_t)SA_LEN((struct sockaddr *)&sa)))
     sa.ss_family = 255;
-    TEST(strncmp(
-             "sock_ntop: unknown AF",
-             Sock_ntop((struct sockaddr *)&sa, SA_LEN((struct sockaddr *)&sa)),
-             21) == 0);
+    TEST(strncmp("sock_ntop: unknown AF",
+                 Sock_ntop((struct sockaddr *)&sa,
+                           (socklen_t)SA_LEN((struct sockaddr *)&sa)),
+                 21) == 0);
 
     // testing filter option ip.prefix parsing
     TEST(0 == sock_pton_with_prefix("[10.10.250.22/16]:1234",

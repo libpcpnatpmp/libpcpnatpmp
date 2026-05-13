@@ -2,7 +2,7 @@ AM_CPPFLAGS = -I$(srcdir)/include -I$(srcdir)/src/net -I$(srcdir)/src -I$(srcdir
 AM_CPPFLAGS += $(PCP_CPPFLAGS)
 AM_CFLAGS = $(PCP_CFLAGS)
 
-pkginclude_HEADERS = include/pcpnatpmp.h
+include_HEADERS = include/pcpnatpmp.h
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libpcpnatpmp.pc
 
@@ -30,7 +30,6 @@ noinst_HEADERS =    src/net/pcp_socket.h\
                     src/net/findsaddr.h \
                     src/net/unp.h
 
-libpcpnatpmp_la_LDFLAGS = -version-info 0:0:0 -release 2 ${PCP_LDFLAGS}
+libpcpnatpmp_la_LDFLAGS = -version-info 1:0:0 ${PCP_LDFLAGS}
 
 libpcpnatpmp_la_LIBADD = $(GCOVLIB)
-

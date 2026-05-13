@@ -61,23 +61,15 @@
  * best-guessing ourselves.
  */
 
-#ifndef SOCKET
-#define SOCKET int
-#endif
-
-#ifndef INVALID_SOCKET
-#define INVALID_SOCKET -1
-#endif
-
 const char *findsaddr(register const struct sockaddr_in *to,
                       struct in6_addr *from) {
     const char *errstr;
     struct sockaddr_in cto, cfrom;
-    SOCKET s;
+    PCP_SOCKET s;
     socklen_t len;
 
     s = socket(AF_INET, SOCK_DGRAM, 0);
-    if (s == INVALID_SOCKET)
+    if (s == PCP_INVALID_SOCKET)
         return ("failed to open DGRAM socket for src addr selection.");
     errstr = NULL;
     len = sizeof(struct sockaddr_in);
@@ -115,7 +107,7 @@ const char *findsaddr6(register const struct sockaddr_in6 *to,
                        uint32_t *from_scope_id) {
     const char *errstr;
     struct sockaddr_in6 cto, cfrom;
-    SOCKET s;
+    PCP_SOCKET s;
     socklen_t len;
     uint32_t sock_flg = 0;
 
@@ -125,7 +117,7 @@ const char *findsaddr6(register const struct sockaddr_in6 *to,
     }
 
     s = socket(AF_INET6, SOCK_DGRAM, 0);
-    if (s == INVALID_SOCKET)
+    if (s == PCP_INVALID_SOCKET)
         return ("failed to open DGRAM socket for src addr selection.");
 
     errstr = NULL;

@@ -218,7 +218,13 @@ static pcp_errno build_pcp_options(pcp_flow_t *flow, void *cur) {
     }
 #endif
 
-    flow->pcp_msg_len = ((char *)cur) - flow->pcp_msg_buffer;
+    {
+        ptrdiff_t msg_len = ((char *)cur) - flow->pcp_msg_buffer;
+        if (msg_len < 0 || msg_len > UINT32_MAX) {
+            return PCP_ERR_NO_MEM;
+        }
+        flow->pcp_msg_len = (uint32_t)msg_len;
+    }
 
     // TODO: implement building all pcp options into msg
     return PCP_ERR_SUCCESS;
@@ -408,7 +414,16 @@ void *build_pcp_msg(pcp_flow_t *flow) {
         memcpy(&req->ip, &flow->kd.src_ip, 16);
         // next data in the packet
         next_data = req->next_data;
-        flow->pcp_msg_len = (uint8_t *)next_data - (uint8_t *)req;
+        {
+            ptrdiff_t msg_len = (uint8_t *)next_data - (uint8_t *)req;
+            if (msg_len < 0 || msg_len > UINT32_MAX) {
+                PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                        "PCP message header length overflow");
+                PCP_LOG_END(PCP_LOGLVL_DEBUG);
+                return NULL;
+            }
+            flow->pcp_msg_len = (uint32_t)msg_len;
+        }
 
         switch (flow->kd.operation) {
         case PCP_OPCODE_PEER:

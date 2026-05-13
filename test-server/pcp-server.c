@@ -38,6 +38,7 @@
 #include "pcp_socket.h"
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -135,7 +136,12 @@ static PCP_SOCKET createPCPsocket(const char *serverPort,
         // lose the pesky "address already in use" error message
         setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(int));
 
-        if (bind(sockfd, p->ai_addr, p->ai_addrlen) ==
+        if (p->ai_addrlen > INT_MAX) {
+            CLOSE(sockfd);
+            continue;
+        }
+
+        if (bind(sockfd, p->ai_addr, (socklen_t)p->ai_addrlen) ==
             PCP_SOCKET_ERROR) { // LCOV_EXCL_START
             CLOSE(sockfd);
             perror("PCP server: bind");
@@ -539,7 +545,7 @@ static int printPCPreq(void *req, int req_size, options_occur_t *opt_occ,
         if ((common_req->r_opcode & 0x7F) == PCP_OPCODE_SADSCP) {
 
             pcp_sadscp_req_t *sadscp;
-            size_t sadscp_size;
+            int sadscp_size;
 
             if (remainingSize < (int)sizeof(pcp_sadscp_req_t)) {
                 return PCP_RES_MALFORMED_REQUEST;

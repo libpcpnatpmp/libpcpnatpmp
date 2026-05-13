@@ -50,28 +50,11 @@ typedef uint16_t in_port_t;
 #if 1 // WINVER<NTDDI_VISTA
 static inline const char *pcp_inet_ntop(int af, const void *src, char *dst,
                                         int cnt) {
-    struct sockaddr_storage srcaddr;
-    size_t slen;
+    if (cnt <= 0) {
+        return NULL;
+    }
 
-    if (af == AF_INET) {
-        struct sockaddr_in *sa4 = (struct sockaddr_in *)&srcaddr;
-        memset(sa4, 0, sizeof(struct sockaddr_in));
-        memcpy(&(sa4->sin_addr), src, sizeof(sa4->sin_addr));
-        slen = sizeof(struct sockaddr_in);
-    } else if (af == AF_INET6) {
-        struct sockaddr_in6 *sa6 = (struct sockaddr_in6 *)&srcaddr;
-        memset(sa6, 0, sizeof(struct sockaddr_in6));
-        memcpy(&(sa6->sin6_addr), src, sizeof(sa6->sin6_addr));
-        slen = sizeof(struct sockaddr_in6);
-    } else {
-        return NULL;
-    }
-    srcaddr.ss_family = af;
-    if (WSAAddressToString((struct sockaddr *)&srcaddr, (DWORD)slen, 0, dst,
-                           (LPDWORD)&cnt) != 0) {
-        return NULL;
-    }
-    return dst;
+    return InetNtopA(af, (PVOID)src, dst, (size_t)cnt);
 }
 #define inet_ntop pcp_inet_ntop
 #endif

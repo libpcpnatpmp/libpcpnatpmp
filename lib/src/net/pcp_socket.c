@@ -32,6 +32,7 @@
 #endif
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef WIN32
@@ -76,7 +77,6 @@ int pcp_win_sock_startup() {
     int err;
     WORD wVersionRequested;
     WSADATA wsaData;
-    OSVERSIONINFOEX osvi;
 
     /* Use the MAKEWORD(lowbyte, highbyte) macro declared in Windef.h */
     wVersionRequested = MAKEWORD(2, 2);
@@ -87,15 +87,6 @@ int pcp_win_sock_startup() {
         perror("WSAStartup failed with error");
         return 1;
     }
-    // find windows version
-    ZeroMemory(&osvi, sizeof(osvi));
-    osvi.dwOSVersionInfoSize = sizeof(osvi);
-
-    if (!GetVersionEx((LPOSVERSIONINFO)(&osvi))) {
-        printf("pcp_app: GetVersionEx failed");
-        return 1;
-    }
-
     return 0;
 }
 
@@ -309,7 +300,8 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
 #endif // IPV6_RECVPKTINFO
     }
 #endif // IP_PKTINFO && IPV6_RECVPKTINFO
-    while (bind(s, (struct sockaddr *)&sas, SA_LEN((struct sockaddr *)&sas)) ==
+    while (bind(s, (struct sockaddr *)&sas,
+                (socklen_t)SA_LEN((struct sockaddr *)&sas)) ==
            PCP_SOCKET_ERROR) {
         if (pcp_get_error() == PCP_ERR_ADDRINUSE) {
             if (sas.ss_family == AF_INET) {
@@ -368,7 +360,10 @@ static ssize_t pcp_socket_recvfrom_impl(PCP_SOCKET sock, void *buf, size_t len,
     WSABUF iov;
     WSACMSGHDR *cmsg;
     iov.buf = buf;
-    iov.len = len;
+    if (len > ULONG_MAX) {
+        return PCP_ERR_RECV_FAILED;
+    }
+    iov.len = (ULONG)len;
 
     memset(&msg, 0, sizeof(msg));
     msg.name = (struct sockaddr *)src_addr;
@@ -488,7 +483,10 @@ static ssize_t pcp_socket_sendto_impl(PCP_SOCKET sock, const void *buf,
 #else  // WIN32
         WSABUF wsaBuf;
         wsaBuf.buf = (void *)buf;
-        wsaBuf.len = len;
+        if (len > ULONG_MAX) {
+            return PCP_ERR_SEND_FAILED;
+        }
+        wsaBuf.len = (ULONG)len;
         uint8_t c[WSA_CMSG_SPACE(sizeof(struct in6_pktinfo))] = {0};
 
         WSAMSG wsaMsg;

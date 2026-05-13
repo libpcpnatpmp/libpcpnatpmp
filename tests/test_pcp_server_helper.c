@@ -16,6 +16,7 @@
 
 #include "pcp_socket.h"
 #include "pcp_utils.h"
+#include <limits.h>
 
 static int start_next_server(test_pcp_server_sequence_t *sequence) {
     const test_pcp_server_config_t *config;
@@ -129,6 +130,7 @@ pcp_fstate_e test_pcp_wait_with_servers(pcp_flow_t *flow, int timeout_ms,
                                         test_pcp_server_sequence_t *sequence) {
     fd_set read_fds;
     int fdmax;
+    PCP_SOCKET sock;
     struct timeval tout_end;
     struct timeval tout_select;
     int nflow_exit_states = pcp_eval_flow_state(flow, NULL);
@@ -173,7 +175,11 @@ pcp_fstate_e test_pcp_wait_with_servers(pcp_flow_t *flow, int timeout_ms,
         }
 
         FD_ZERO(&read_fds);
-        fdmax = pcp_get_socket(ctx);
+        sock = pcp_get_socket(ctx);
+        if (sock > INT_MAX - 1) {
+            return pcp_state_failed;
+        }
+        fdmax = (int)sock;
         FD_SET(fdmax, &read_fds);
         fdmax++;
 

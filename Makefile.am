@@ -42,6 +42,8 @@ EXTRA_DIST = tests/test_get_dscp.sh \
              tests/test_flow_md.sh \
              INSTALL.md \
              README.md \
+             CHANGELOG.md \
+             CONTRIBUTING.md \
              cli-client/README.md \
              test-server/README.md \
              scapy/README.md \

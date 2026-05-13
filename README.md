@@ -21,3 +21,6 @@ Components
 
 Build instructions are located in [INSTALL.md](INSTALL.md) file.
 More information about components are in each subdirectory's README.md file.
+
+Versioning follows [Semantic Versioning](https://semver.org/).
+Release notes are tracked in [CHANGELOG.md](CHANGELOG.md).

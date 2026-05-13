@@ -348,7 +348,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s) {
         ret = pcp_socket_sendto(
             ctx, flow->pcp_msg_buffer + ret, flow->pcp_msg_len - ret,
             MSG_DONTWAIT, &src_saddr, (struct sockaddr *)&s->pcp_server_saddr,
-            SA_LEN((struct sockaddr *)&s->pcp_server_saddr));
+            (socklen_t)SA_LEN((struct sockaddr *)&s->pcp_server_saddr));
         if (ret <= 0) {
             PCP_LOG(PCP_LOGLVL_WARN,
                     "Error occurred while sending "
@@ -370,7 +370,7 @@ static pcp_errno pcp_flow_send_msg(pcp_flow_t *flow, pcp_server_t *s) {
 
 static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg) {
     ssize_t ret;
-    socklen_t src_len = sizeof(msg->rcvd_from_addr);
+    socklen_t src_len = (socklen_t)sizeof(msg->rcvd_from_addr);
 
     memset(msg, 0, sizeof(*msg));
 
@@ -381,7 +381,10 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg) {
         return ret;
     }
 
-    msg->pcp_msg_len = ret;
+    if (ret > INT32_MAX) {
+        return PCP_ERR_RECV_FAILED;
+    }
+    msg->pcp_msg_len = (uint32_t)ret;
 
     return PCP_ERR_SUCCESS;
 }

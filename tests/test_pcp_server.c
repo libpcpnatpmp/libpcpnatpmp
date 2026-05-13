@@ -38,13 +38,13 @@
 #ifdef WIN32
 #define DUP _dup
 #define DUP2 _dup2
-#define FD_CLOSE _close
+#define FILE_CLOSE _close
 #define FILENO _fileno
 #define SOCK_CLOSE closesocket
 #else
 #define DUP dup
 #define DUP2 dup2
-#define FD_CLOSE close
+#define FILE_CLOSE close
 #define FILENO fileno
 #define SOCK_CLOSE close
 #endif
@@ -432,7 +432,7 @@ static void test_malformed_packet(void) {
 
     fflush(stdout);
     TEST(DUP2(saved_stdout, stdout_fd) >= 0);
-    FD_CLOSE(saved_stdout);
+    FILE_CLOSE(saved_stdout);
 
     stdout_data = read_stream(stdout_capture);
     fclose(stdout_capture);

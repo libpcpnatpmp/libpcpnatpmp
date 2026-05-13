@@ -331,7 +331,16 @@ int pcp_new_server(pcp_ctx_t *ctx, struct in6_addr *ip, uint16_t port,
     ret->server_state = pss_allocated;
     ret->pcp_version = PCP_MAX_SUPPORTED_VERSION;
     createNonce(&ret->nonce);
-    ret->index = ret - ctx->pcp_db.pcp_servers;
+    {
+        ptrdiff_t index = ret - ctx->pcp_db.pcp_servers;
+        if (index < 0 || index > INT32_MAX) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s", "PCP server index out of range");
+            ret->index = -1;
+            PCP_LOG_END(PCP_LOGLVL_DEBUG);
+            return -1;
+        }
+        ret->index = (int)index;
+    }
 
     PCP_LOG_END(PCP_LOGLVL_DEBUG);
     return ret->index;

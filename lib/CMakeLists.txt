@@ -48,7 +48,7 @@ add_library (pcpnatpmp
 
 set_target_properties (pcpnatpmp PROPERTIES
     VERSION ${PROJECT_VERSION}
-    SOVERSION 0
+    SOVERSION 1
 )
 
 if (WIN32)
