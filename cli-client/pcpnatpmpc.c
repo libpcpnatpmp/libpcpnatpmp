@@ -31,6 +31,7 @@
 #endif
 
 #include "getopt.h"
+#include "pcp_cli_nonce.h"
 #include "pcpnatpmp.h"
 #include <ctype.h>
 #include <errno.h>
@@ -741,37 +742,8 @@ static inline void parse_opt_lifetime(struct pcp_params *p) {
     p->opt_lifetime = (uint32_t)atoi(optarg);
 }
 
-static int parse_nonce_words_be(const char *txt, uint32_t nonce_words_be[3]) {
-    char chunk[9];
-    unsigned long parsed;
-    int i;
-    char *endptr;
-
-    if (!txt || strlen(txt) != 24) {
-        return 1;
-    }
-    for (i = 0; i < 24; i++) {
-        if (!isxdigit((unsigned char)txt[i])) {
-            return 1;
-        }
-    }
-
-    chunk[8] = '\0';
-    for (i = 0; i < 3; i++) {
-        memcpy(chunk, txt + (i * 8), 8);
-        errno = 0;
-        parsed = strtoul(chunk, &endptr, 16);
-        if ((errno != 0) || (*endptr != '\0') || (parsed > 0xFFFFFFFFUL)) {
-            return 1;
-        }
-        nonce_words_be[i] = htonl((uint32_t)parsed);
-    }
-
-    return 0;
-}
-
 static inline void parse_opt_nonce(struct pcp_params *p) {
-    if (parse_nonce_words_be(optarg, p->nonce_words_be) != 0) {
+    if (pcp_cli_parse_nonce_words_be(optarg, p->nonce_words_be) != 0) {
         fprintf(stderr,
                 "Invalid nonce format. Expected exactly 24 hex chars.\n");
         exit(1);

@@ -1,4 +1,5 @@
 set (PCP_CLIENT_SRC
+    pcp_cli_nonce.c
     pcpnatpmpc.c
 )
 

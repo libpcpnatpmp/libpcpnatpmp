@@ -13,7 +13,6 @@
 #include "default_config.h"
 #endif
 
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +28,11 @@
 #include <unistd.h>
 #endif
 
+#include "pcp_socket.h"
 #include "pcpnatpmp.h"
 #include "test_macro.h"
 #include "test_pcp_server_helper.h"
+#include "test_process_helper.h"
 #include "unp.h"
 
 #ifdef WIN32
@@ -46,25 +47,7 @@
 #define FILENO fileno
 #endif
 
-static jmp_buf server_exit_env;
-static int server_exit_code;
-
-static void server_test_exit(int code) {
-    server_exit_code = code;
-    longjmp(server_exit_env, 1);
-}
-
-#define exit server_test_exit
-#define main pcp_server_main
-#include "../test-server/main.c"
-#undef main
-#undef exit
-
-typedef struct server_run_result {
-    int exit_code;
-    char *stdout_data;
-    char *stderr_data;
-} server_run_result_t;
+typedef test_process_result_t server_run_result_t;
 
 static char *read_stream(FILE *stream) {
     long size;
@@ -85,74 +68,18 @@ static char *read_stream(FILE *stream) {
 }
 
 static void free_server_run_result(server_run_result_t *result) {
-    free(result->stdout_data);
-    free(result->stderr_data);
-    result->stdout_data = NULL;
-    result->stderr_data = NULL;
-}
-
-static void reset_getopt_state(void) {
-#if defined(__GLIBC__)
-    optind = 0;
-#else
-    optind = 1;
-#endif
-    opterr = 1;
-    optopt = 0;
-    optarg = NULL;
-}
-
-static server_run_result_t run_server_main(int argc, char **argv) {
-    server_run_result_t result;
-    FILE *stdout_capture;
-    FILE *stderr_capture;
-    int stdout_fd;
-    int stderr_fd;
-    int saved_stdout;
-    int saved_stderr;
-
-    memset(&result, 0, sizeof(result));
-    stdout_capture = tmpfile();
-    stderr_capture = tmpfile();
-    TEST(stdout_capture != NULL);
-    TEST(stderr_capture != NULL);
-
-    stdout_fd = FILENO(stdout);
-    stderr_fd = FILENO(stderr);
-    saved_stdout = DUP(stdout_fd);
-    saved_stderr = DUP(stderr_fd);
-    TEST(saved_stdout >= 0);
-    TEST(saved_stderr >= 0);
-
-    fflush(stdout);
-    fflush(stderr);
-    TEST(DUP2(FILENO(stdout_capture), stdout_fd) >= 0);
-    TEST(DUP2(FILENO(stderr_capture), stderr_fd) >= 0);
-
-    reset_getopt_state();
-    server_exit_code = -1;
-    if (setjmp(server_exit_env) == 0) {
-        result.exit_code = pcp_server_main(argc, argv);
-    } else {
-        result.exit_code = server_exit_code;
-    }
-
-    fflush(stdout);
-    fflush(stderr);
-    TEST(DUP2(saved_stdout, stdout_fd) >= 0);
-    TEST(DUP2(saved_stderr, stderr_fd) >= 0);
-    FD_CLOSE(saved_stdout);
-    FD_CLOSE(saved_stderr);
-
-    result.stdout_data = read_stream(stdout_capture);
-    result.stderr_data = read_stream(stderr_capture);
-    fclose(stdout_capture);
-    fclose(stderr_capture);
-    return result;
+    test_process_result_free(result);
 }
 
 static int contains_string(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
+}
+
+static server_run_result_t run_server_main(int argc, char **argv) {
+    server_run_result_t result;
+
+    TEST(test_process_run(PCP_TEST_SERVER_EXE, argc, argv, &result) == 0);
+    return result;
 }
 
 static char *read_file(const char *path) {

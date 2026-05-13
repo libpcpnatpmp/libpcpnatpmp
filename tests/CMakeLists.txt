@@ -29,6 +29,9 @@ set (TEST_PCP_SERVER_HELPER_SOURCES
     test_pcp_server_helper.c
     ../test-server/pcp-server.c
 )
+set (TEST_PROCESS_HELPER_SOURCES
+    test_process_helper.c
+)
 
 set (TEST_FLOW_NOTIFY_SOURCES
     test_flow_notify.c
@@ -45,27 +48,18 @@ add_executable (test_lifetime_renewal ${TEST_LIFETIME_RENEWAL_SOURCES})
 add_executable (test_pcp_api test_pcp_api.c)
 set (TEST_PCP_CLI_NONCE_SRC
     test_pcp_cli_nonce.c
+    ${TEST_PROCESS_HELPER_SOURCES}
+    ../cli-client/pcp_cli_nonce.c
 )
-if (WIN32)
-    list (APPEND TEST_PCP_CLI_NONCE_SRC
-        ../win_utils/getopt.c
-        ../win_utils/getopt_long.c
-        ../lib/src/windows/pcp_gettimeofday.c
-    )
-endif ()
 add_executable (test_pcp_cli_nonce ${TEST_PCP_CLI_NONCE_SRC})
+add_dependencies (test_pcp_cli_nonce pcpnatpmpc)
 set (TEST_PCP_CLI_CLIENT_SOURCES
     test_pcp_cli_client.c
+    ${TEST_PROCESS_HELPER_SOURCES}
     ${TEST_PCP_SERVER_HELPER_SOURCES}
 )
-if (WIN32)
-    list (APPEND TEST_PCP_CLI_CLIENT_SOURCES
-        ../win_utils/getopt.c
-        ../win_utils/getopt_long.c
-        ../lib/src/windows/pcp_gettimeofday.c
-    )
-endif ()
 add_executable (test_pcp_cli_client ${TEST_PCP_CLI_CLIENT_SOURCES})
+add_dependencies (test_pcp_cli_client pcpnatpmpc)
 add_executable (test_pcp_client_db test_pcp_client_db.c)
 set (TEST_PCP_CLIENT_MAP_OPCODE_SOURCES
     test_pcp_client_map_opcode.c
@@ -84,16 +78,11 @@ add_executable (test_pcp_msg test_pcp_msg.c)
 add_executable (test_ping_gws test_server_discovery.c)
 set (TEST_PCP_SERVER_SOURCES
     test_pcp_server.c
+    ${TEST_PROCESS_HELPER_SOURCES}
     ${TEST_PCP_SERVER_HELPER_SOURCES}
 )
-if (WIN32)
-    list (APPEND TEST_PCP_SERVER_SOURCES
-        ../win_utils/getopt.c
-        ../win_utils/getopt_long.c
-        ../lib/src/windows/pcp_gettimeofday.c
-    )
-endif ()
 add_executable (test_pcp_server ${TEST_PCP_SERVER_SOURCES})
+add_dependencies (test_pcp_server pcp-server)
 set (TEST_SERVER_REPING_SOURCES
     test_server_reping.c
     ${TEST_PCP_SERVER_HELPER_SOURCES}
@@ -116,7 +105,7 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
-target_link_libraries (test_pcp_cli_client pcpnatpmp Threads::Threads)
+target_link_libraries (test_pcp_cli_client pcpnatpmp)
 target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
 target_link_libraries (test_pcp_client_map_opcode pcpnatpmp)
@@ -129,6 +118,16 @@ target_link_libraries (test_server_reping pcpnatpmp)
 target_link_libraries (test_server_restart pcpnatpmp Threads::Threads)
 target_link_libraries (test_sock_ntop pcpnatpmp)
 target_link_libraries (test_version_negotiation pcpnatpmp)
+
+target_compile_definitions (test_pcp_cli_client PRIVATE
+    PCP_CLI_CLIENT_EXE=\"$<TARGET_FILE:pcpnatpmpc>\"
+)
+target_compile_definitions (test_pcp_cli_nonce PRIVATE
+    PCP_CLI_CLIENT_EXE=\"$<TARGET_FILE:pcpnatpmpc>\"
+)
+target_compile_definitions (test_pcp_server PRIVATE
+    PCP_TEST_SERVER_EXE=\"$<TARGET_FILE:pcp-server>\"
+)
 
 register_pcp_test (test_event_handler)
 register_pcp_test (test_flow_notify)

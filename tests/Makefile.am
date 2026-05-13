@@ -21,9 +21,10 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_msg \
                  test_server_reping
 
-noinst_HEADERS = test_macro.h test_pcp_server_helper.h
+noinst_HEADERS = test_macro.h test_pcp_server_helper.h test_process_helper.h
 
 TEST_PCP_SERVER_HELPER_SOURCES = test_pcp_server_helper.c ../test-server/pcp-server.c ../test-server/pcp-server.h
+TEST_PROCESS_HELPER_SOURCES = test_process_helper.c test_process_helper.h
 
 test_flow_notify_SOURCES = test_flow_notify.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_flow_notify_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
@@ -40,7 +41,9 @@ test_ping_gws_SOURCES = test_server_discovery.c
 test_ping_gws_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_ping_gws_LDFLAGS = -static
 
-test_pcp_server_SOURCES = test_pcp_server.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_pcp_server_SOURCES = test_pcp_server.c $(TEST_PROCESS_HELPER_SOURCES) $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_pcp_server_CPPFLAGS = $(AM_CPPFLAGS) -DPCP_TEST_SERVER_EXE=\"$(abs_top_builddir)/test-server/pcp-server$(EXEEXT)\"
+test_pcp_server_DEPENDENCIES = $(top_builddir)/test-server/pcp-server$(EXEEXT)
 test_pcp_server_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_server_LDFLAGS = -static
 
@@ -76,17 +79,15 @@ test_pcp_api_SOURCES = test_pcp_api.c
 test_pcp_api_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_api_LDFLAGS = -static
 
-test_pcp_cli_client_SOURCES = test_pcp_cli_client.c $(TEST_PCP_SERVER_HELPER_SOURCES)
-if PLATFORM_WINDOWS
-test_pcp_cli_client_SOURCES += ../win_utils/getopt.c ../win_utils/getopt_long.c ../lib/src/windows/pcp_gettimeofday.c
-endif
-test_pcp_cli_client_LDADD = $(top_builddir)/lib/libpcpnatpmp.la -lpthread
+test_pcp_cli_client_SOURCES = test_pcp_cli_client.c $(TEST_PROCESS_HELPER_SOURCES) $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_pcp_cli_client_CPPFLAGS = $(AM_CPPFLAGS) -DPCP_CLI_CLIENT_EXE=\"$(abs_top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)\"
+test_pcp_cli_client_DEPENDENCIES = $(top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)
+test_pcp_cli_client_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_cli_client_LDFLAGS = -static
 
-test_pcp_cli_nonce_SOURCES = test_pcp_cli_nonce.c
-if PLATFORM_WINDOWS
-test_pcp_cli_nonce_SOURCES += ../win_utils/getopt.c ../win_utils/getopt_long.c ../lib/src/windows/pcp_gettimeofday.c
-endif
+test_pcp_cli_nonce_SOURCES = test_pcp_cli_nonce.c $(TEST_PROCESS_HELPER_SOURCES) ../cli-client/pcp_cli_nonce.c ../cli-client/pcp_cli_nonce.h
+test_pcp_cli_nonce_CPPFLAGS = $(AM_CPPFLAGS) -DPCP_CLI_CLIENT_EXE=\"$(abs_top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)\"
+test_pcp_cli_nonce_DEPENDENCIES = $(top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)
 test_pcp_cli_nonce_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_cli_nonce_LDFLAGS = -static
 

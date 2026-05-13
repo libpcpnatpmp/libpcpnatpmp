@@ -13,217 +13,40 @@
 #include "default_config.h"
 #endif
 
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef WIN32
-#include <io.h>
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <pthread.h>
-#include <unistd.h>
-#endif
-
+#include "pcp_socket.h"
 #include "test_macro.h"
 #include "test_pcp_server_helper.h"
+#include "test_process_helper.h"
 
-#ifdef WIN32
-#define DUP _dup
-#define DUP2 _dup2
-#define FD_CLOSE _close
-#define FILENO _fileno
-#else
-#define DUP dup
-#define DUP2 dup2
-#define FD_CLOSE close
-#define FILENO fileno
-#endif
-
-static jmp_buf cli_exit_env;
-static int cli_exit_code;
-
-static void cli_test_exit(int code) {
-    cli_exit_code = code;
-    longjmp(cli_exit_env, 1);
-}
-
-#define exit cli_test_exit
-#define main pcpnatpmpc_main
-#include "../cli-client/pcpnatpmpc.c"
-#undef main
-#undef exit
-
-typedef struct cli_run_result {
-    int exit_code;
-    char *stdout_data;
-    char *stderr_data;
-} cli_run_result_t;
-
-typedef struct server_runner {
-    test_pcp_server_sequence_t sequence;
-    const test_pcp_server_config_t *configs;
-    size_t config_count;
-    volatile int stop_requested;
-    int last_error;
-#ifdef WIN32
-    HANDLE thread_handle;
-#else
-    pthread_t thread;
-#endif
-} server_runner_t;
-
-static char *read_stream(FILE *stream) {
-    long size;
-    char *buffer;
-
-    TEST(fseek(stream, 0, SEEK_END) == 0);
-    size = ftell(stream);
-    TEST(size >= 0);
-    TEST(fseek(stream, 0, SEEK_SET) == 0);
-
-    buffer = (char *)malloc((size_t)size + 1);
-    TEST(buffer != NULL);
-    if (size > 0) {
-        TEST(fread(buffer, 1, (size_t)size, stream) == (size_t)size);
-    }
-    buffer[size] = '\0';
-    return buffer;
-}
+typedef test_process_result_t cli_run_result_t;
 
 static void free_cli_run_result(cli_run_result_t *result) {
-    free(result->stdout_data);
-    free(result->stderr_data);
-    result->stdout_data = NULL;
-    result->stderr_data = NULL;
-}
-
-static void reset_getopt_state(void) {
-#if defined(__GLIBC__)
-    optind = 0;
-#else
-    optind = 1;
-#endif
-    opterr = 1;
-    optopt = 0;
-    optarg = NULL;
-}
-
-static cli_run_result_t run_cli(int argc, char **argv) {
-    cli_run_result_t result;
-    FILE *stdout_capture;
-    FILE *stderr_capture;
-    int stdout_fd;
-    int stderr_fd;
-    int saved_stdout;
-    int saved_stderr;
-
-    memset(&result, 0, sizeof(result));
-
-    stdout_capture = tmpfile();
-    stderr_capture = tmpfile();
-    TEST(stdout_capture != NULL);
-    TEST(stderr_capture != NULL);
-
-    stdout_fd = FILENO(stdout);
-    stderr_fd = FILENO(stderr);
-    saved_stdout = DUP(stdout_fd);
-    saved_stderr = DUP(stderr_fd);
-    TEST(saved_stdout >= 0);
-    TEST(saved_stderr >= 0);
-
-    fflush(stdout);
-    fflush(stderr);
-    TEST(DUP2(FILENO(stdout_capture), stdout_fd) >= 0);
-    TEST(DUP2(FILENO(stderr_capture), stderr_fd) >= 0);
-
-    reset_getopt_state();
-    cli_exit_code = -1;
-    if (setjmp(cli_exit_env) == 0) {
-        result.exit_code = pcpnatpmpc_main(argc, argv);
-    } else {
-        result.exit_code = cli_exit_code;
-    }
-
-    fflush(stdout);
-    fflush(stderr);
-    TEST(DUP2(saved_stdout, stdout_fd) >= 0);
-    TEST(DUP2(saved_stderr, stderr_fd) >= 0);
-    FD_CLOSE(saved_stdout);
-    FD_CLOSE(saved_stderr);
-
-    result.stdout_data = read_stream(stdout_capture);
-    result.stderr_data = read_stream(stderr_capture);
-
-    fclose(stdout_capture);
-    fclose(stderr_capture);
-    return result;
-}
-
-#ifdef WIN32
-static DWORD WINAPI server_runner_main(LPVOID arg) {
-#else
-static void *server_runner_main(void *arg) {
-#endif
-    server_runner_t *runner = (server_runner_t *)arg;
-
-    test_pcp_server_sequence_init(&runner->sequence, runner->configs,
-                                  runner->config_count);
-    while (!runner->stop_requested &&
-           test_pcp_server_sequence_is_active(&runner->sequence)) {
-        if (test_pcp_server_sequence_pulse(&runner->sequence, 100) < 0) {
-            runner->last_error = 1;
-            break;
-        }
-    }
-
-    test_pcp_server_sequence_stop(&runner->sequence);
-
-#ifdef WIN32
-    return 0;
-#else
-    return NULL;
-#endif
-}
-
-static void start_server_runner(server_runner_t *runner,
-                                const test_pcp_server_config_t *configs,
-                                size_t config_count) {
-    memset(runner, 0, sizeof(*runner));
-    runner->configs = configs;
-    runner->config_count = config_count;
-
-#ifdef WIN32
-    runner->thread_handle =
-        CreateThread(NULL, 0, server_runner_main, runner, 0, NULL);
-    TEST(runner->thread_handle != NULL);
-#else
-    TEST(pthread_create(&runner->thread, NULL, server_runner_main, runner) ==
-         0);
-#endif
-
-    test_sleep_ms(100);
-}
-
-static void stop_server_runner(server_runner_t *runner) {
-    runner->stop_requested = 1;
-
-#ifdef WIN32
-    TEST(WaitForSingleObject(runner->thread_handle, INFINITE) == WAIT_OBJECT_0);
-    CloseHandle(runner->thread_handle);
-#else
-    TEST(pthread_join(runner->thread, NULL) == 0);
-#endif
-
-    TEST(runner->last_error == 0);
-    test_sleep_ms(50);
+    test_process_result_free(result);
 }
 
 static int contains_string(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
+}
+
+static void expect_exit_code(const cli_run_result_t *result, int expected) {
+    if (result->exit_code != expected) {
+        printf("Unexpected CLI exit code %d, expected "
+               "%d\nstdout:\n%s\nstderr:\n%s\n",
+               result->exit_code, expected, result->stdout_data,
+               result->stderr_data);
+    }
+    TEST(result->exit_code == expected);
+}
+
+static cli_run_result_t run_cli(int argc, char **argv) {
+    cli_run_result_t result;
+
+    TEST(test_process_run(PCP_CLI_CLIENT_EXE, argc, argv, &result) == 0);
+    return result;
 }
 
 static cli_run_result_t
@@ -231,11 +54,33 @@ run_cli_with_servers(int argc, char **argv,
                      const test_pcp_server_config_t *configs,
                      size_t config_count) {
     cli_run_result_t result;
-    server_runner_t runner;
+    test_process_t process;
+    test_pcp_server_sequence_t sequence;
+    int exited = 0;
+    int exit_code = -1;
+    int elapsed_ms = 0;
 
-    start_server_runner(&runner, configs, config_count);
-    result = run_cli(argc, argv);
-    stop_server_runner(&runner);
+    test_pcp_server_sequence_init(&sequence, configs, config_count);
+    test_sleep_ms(100);
+    TEST(test_process_start(&process, PCP_CLI_CLIENT_EXE, argc, argv) == 0);
+
+    while (!exited && elapsed_ms < 10000) {
+        TEST(test_process_try_wait(&process, &exited, &exit_code) == 0);
+        if (exited) {
+            break;
+        }
+
+        if (test_pcp_server_sequence_is_active(&sequence)) {
+            TEST(test_pcp_server_sequence_pulse(&sequence, 50) >= 0);
+        } else {
+            test_sleep_ms(50);
+        }
+        elapsed_ms += 50;
+    }
+
+    TEST(exited);
+    TEST(test_process_finish(&process, &result) == 0);
+    test_pcp_server_sequence_stop(&sequence);
 
     return result;
 }
@@ -342,7 +187,7 @@ static void test_ipv4_server_cases(void) {
                         ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 3);
+        expect_exit_code(&result, 3);
         free_cli_run_result(&result);
     }
 
@@ -354,7 +199,7 @@ static void test_ipv4_server_cases(void) {
                         "--internal", ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 4);
+        expect_exit_code(&result, 4);
         free_cli_run_result(&result);
     }
 
@@ -376,7 +221,7 @@ static void test_ipv4_server_cases(void) {
             "1",          "--fast-return", "-i",        ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 2);
+        expect_exit_code(&result, 2);
         free_cli_run_result(&result);
     }
 
@@ -387,7 +232,7 @@ static void test_ipv4_server_cases(void) {
             "--fast-return", "-i", ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 0);
+        expect_exit_code(&result, 0);
         free_cli_run_result(&result);
     }
 }
@@ -413,7 +258,7 @@ static void test_ipv6_server_cases(void) {
                         "[::]:4321",  "--fast-return"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 0);
+        expect_exit_code(&result, 0);
         free_cli_run_result(&result);
     }
 
@@ -457,7 +302,7 @@ static void test_map_options(void) {
                         ":1234",      "-p", "8.8.8.8:3333", "-P"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 1);
+        expect_exit_code(&result, 1);
         free_cli_run_result(&result);
     }
 
@@ -466,7 +311,7 @@ static void test_map_options(void) {
                         "-i",         ":1234", "-F", "[8.8.8.8/12]:4444"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 0);
+        expect_exit_code(&result, 0);
         free_cli_run_result(&result);
     }
 
@@ -476,7 +321,7 @@ static void test_map_options(void) {
                         "8.8.8.8:3333", "-F",    "[8.8.8.8/12]:4444"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 1);
+        expect_exit_code(&result, 1);
         free_cli_run_result(&result);
     }
 }
