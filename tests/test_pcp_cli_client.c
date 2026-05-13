@@ -32,6 +32,11 @@ static int contains_string(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
 
+static void build_server_arg(char *buffer, size_t buffer_size,
+                             const char *address, const char *port) {
+    snprintf(buffer, buffer_size, "%s:%s", address, port);
+}
+
 static void expect_exit_code(const cli_run_result_t *result, int expected) {
     if (result->exit_code != expected) {
         printf("Unexpected CLI exit code %d, expected "
@@ -167,16 +172,19 @@ static void test_timeout_and_parse_cases(void) {
 static void test_ipv4_server_cases(void) {
     test_pcp_server_config_t config;
     cli_run_result_t result;
+    char server_arg[32];
 
     test_pcp_server_config_init(&config);
-    config.server_port = "5351";
     config.server_info.end_after_recv = 1;
     config.server_info.default_result_code = 8;
 
     {
+        config.server_port = "55351";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
         char *argv[] = {"pcpnatpmpc",
                         "--server",
-                        "127.0.0.1",
+                        server_arg,
                         "-f",
                         "--disable-autodiscovery",
                         "--pcp-version",
@@ -193,7 +201,10 @@ static void test_ipv4_server_cases(void) {
 
     config.server_info.default_result_code = 3;
     {
-        char *argv[] = {"pcpnatpmpc", "--server",       "127.0.0.1",
+        config.server_port = "55352";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc", "--server",       server_arg,
                         "-d",         "--pcp-version",  "1",
                         "--peer",     "127.0.0.1:1111", "--fast-return",
                         "--internal", ":1234"};
@@ -205,7 +216,10 @@ static void test_ipv4_server_cases(void) {
 
     config.server_info.default_result_code = 8;
     {
-        char *argv[] = {"pcpnatpmpc",    "--server", "127.0.0.1",       "-f",
+        config.server_port = "55353";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc",    "--server", server_arg,        "-f",
                         "--pcp-version", "1",        "--internal=:1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
@@ -216,9 +230,12 @@ static void test_ipv4_server_cases(void) {
 
     config.server_info.default_result_code = 3;
     {
+        config.server_port = "55354";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
         char *argv[] = {
-            "pcpnatpmpc", "--server",      "127.0.0.1", "--pcp-version",
-            "1",          "--fast-return", "-i",        ":1234"};
+            "pcpnatpmpc", "--server",      server_arg, "--pcp-version",
+            "1",          "--fast-return", "-i",       ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
         expect_exit_code(&result, 2);
@@ -227,9 +244,11 @@ static void test_ipv4_server_cases(void) {
 
     config.server_info.default_result_code = 255;
     {
-        char *argv[] = {
-            "pcpnatpmpc",    "-s", "127.0.0.1", "--pcp-version", "2",
-            "--fast-return", "-i", ":1234"};
+        config.server_port = "55355";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc",    "-s", server_arg, "--pcp-version", "2",
+                        "--fast-return", "-i", ":1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
         expect_exit_code(&result, 0);
@@ -241,20 +260,22 @@ static void test_ipv6_server_cases(void) {
     const char *use_ipv6_socket = getenv("PCP_USE_IPV6_SOCKET");
     test_pcp_server_config_t config;
     cli_run_result_t result;
+    char server_arg[40];
 
     if (use_ipv6_socket == NULL || strcmp(use_ipv6_socket, "1") != 0) {
         return;
     }
 
     test_pcp_server_config_init(&config);
-    config.server_port = "5351";
+    config.server_port = "55356";
     config.server_address = "::1";
     config.server_info.server_version = 1;
     config.server_info.end_after_recv = 2;
+    build_server_arg(server_arg, sizeof(server_arg), "::1", config.server_port);
 
     {
         char *argv[] = {"pcpnatpmpc", "--pcp-version", "2",         "--server",
-                        "::1",        "--internal",    "[::]:1234", "--peer",
+                        server_arg,   "--internal",    "[::]:1234", "--peer",
                         "[::]:4321",  "--fast-return"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
@@ -263,8 +284,9 @@ static void test_ipv6_server_cases(void) {
     }
 
     {
-        char *argv[] = {"pcpnatpmpc", "--pcp-version", "2",  "-s",        "::1",
-                        "-i",         "[::]:1234",     "-p", "[::1]:1234"};
+        char *argv[] = {
+            "pcpnatpmpc", "--pcp-version", "2",  "-s",        server_arg,
+            "-i",         "[::]:1234",     "-p", "[::1]:1234"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
         TEST(result.exit_code == 0);
@@ -283,13 +305,16 @@ static void test_ipv6_server_cases(void) {
 static void test_map_options(void) {
     test_pcp_server_config_t config;
     cli_run_result_t result;
+    char server_arg[32];
 
     test_pcp_server_config_init(&config);
-    config.server_port = "5351";
     config.server_info.end_after_recv = 1;
 
     {
-        char *argv[] = {"pcpnatpmpc", "-d",    "-s", "127.0.0.1",
+        config.server_port = "55357";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc", "-d",    "-s", server_arg,
                         "-i",         ":1234", "-P"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
@@ -298,7 +323,10 @@ static void test_map_options(void) {
     }
 
     {
-        char *argv[] = {"pcpnatpmpc", "-d", "-s",           "127.0.0.1", "-i",
+        config.server_port = "55358";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc", "-d", "-s",           server_arg, "-i",
                         ":1234",      "-p", "8.8.8.8:3333", "-P"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
@@ -307,7 +335,10 @@ static void test_map_options(void) {
     }
 
     {
-        char *argv[] = {"pcpnatpmpc", "-d",    "-s", "127.0.0.1",
+        config.server_port = "55359";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc", "-d",    "-s", server_arg,
                         "-i",         ":1234", "-F", "[8.8.8.8/12]:4444"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
@@ -316,7 +347,10 @@ static void test_map_options(void) {
     }
 
     {
-        char *argv[] = {"pcpnatpmpc",   "-s",    "127.0.0.1",
+        config.server_port = "55360";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc",   "-s",    server_arg,
                         "-i",           ":1234", "-p",
                         "8.8.8.8:3333", "-F",    "[8.8.8.8/12]:4444"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
