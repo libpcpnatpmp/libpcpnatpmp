@@ -35,6 +35,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -223,7 +224,12 @@ pcp_fstate_e pcp_wait(pcp_flow_t *flow, int timeout, int exit_on_partial_res) {
     FD_ZERO(&read_fds);
 
     fd = pcp_get_socket(flow->ctx);
-    fdmax = fd + 1;
+    if (fd > INT_MAX - 1) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                "Socket descriptor value is out of range");
+        return pcp_state_failed;
+    }
+    fdmax = (int)fd + 1;
 
     // main loop
     for (;;) {

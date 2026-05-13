@@ -171,13 +171,14 @@ int *index;
 
     if ((retval = getopt_internal(nargc, nargv, options)) == -2) {
         char *current_argv = nargv[optind++] + 2, *has_equal;
-        int i, current_argv_len, match = -1;
+        int match = -1;
+        size_t i, current_argv_len;
 
         if (*current_argv == '\0') {
             return (-1);
         }
         if ((has_equal = strchr(current_argv, '=')) != NULL) {
-            current_argv_len = has_equal - current_argv;
+            current_argv_len = (size_t)(has_equal - current_argv);
             has_equal++;
         } else
             current_argv_len = strlen(current_argv);
@@ -187,11 +188,11 @@ int *index;
                 continue;
 
             if (strlen(long_options[i].name) == (unsigned)current_argv_len) {
-                match = i;
+                match = (int)i;
                 break;
             }
             if (match == -1)
-                match = i;
+                match = (int)i;
         }
         if (match != -1) {
             if (long_options[match].has_arg == required_argument ||

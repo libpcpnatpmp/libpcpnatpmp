@@ -17,6 +17,7 @@
 #endif
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -89,6 +90,7 @@ static void notify_cb_2(pcp_flow_t *f, struct sockaddr *src_addr,
 static int select_loop(pcp_ctx_t *ctx, test_pcp_server_sequence_t *sequence) {
     fd_set read_fds;
     int fdmax = 0;
+    PCP_SOCKET sock;
     struct timeval tout_end;
     struct timeval tout_select;
     int timeout = 3000; // ms
@@ -130,7 +132,9 @@ static int select_loop(pcp_ctx_t *ctx, test_pcp_server_sequence_t *sequence) {
         }
 
         FD_ZERO(&read_fds);
-        fdmax = pcp_get_socket(ctx);
+        sock = pcp_get_socket(ctx);
+        TEST(sock <= INT_MAX - 1);
+        fdmax = (int)sock;
         FD_SET(fdmax, &read_fds);
         fdmax++;
 

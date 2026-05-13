@@ -16,6 +16,7 @@
 #include "default_config.h"
 #endif
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #ifndef WIN32
@@ -41,6 +42,7 @@ static pcp_fstate_e test_wait(pcp_flow_t *flow, int timeout,
                               test_pcp_server_sequence_t *sequence) {
     fd_set read_fds;
     int fdmax;
+    PCP_SOCKET sock;
     struct timeval tout_end;
     struct timeval tout_select;
     int nflow_exit_states = pcp_eval_flow_state(flow, NULL);
@@ -94,7 +96,11 @@ static pcp_fstate_e test_wait(pcp_flow_t *flow, int timeout,
         }
 
         FD_ZERO(&read_fds);
-        fdmax = pcp_get_socket(ctx);
+        sock = pcp_get_socket(ctx);
+        if (sock > INT_MAX - 1) {
+            return pcp_state_failed;
+        }
+        fdmax = (int)sock;
         FD_SET(fdmax, &read_fds);
         fdmax++;
 
