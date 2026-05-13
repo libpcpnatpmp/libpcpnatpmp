@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project (pcpnatpmp-client VERSION 2.0.0)
+project (pcpnatpmp-client VERSION 1.0.0)
 
 include (CheckIncludeFile)
 include (CheckStructHasMember)
