@@ -51,6 +51,10 @@
 
 typedef test_process_result_t server_run_result_t;
 
+#define TEST_PCP_SERVER_CLI_PORT "55490"
+#define TEST_PCP_SERVER_LOG_PORT "55491"
+#define TEST_PCP_SERVER_MALFORMED_PORT "55492"
+
 static char *read_stream(FILE *stream) {
     long size;
     char *buffer;
@@ -144,7 +148,8 @@ static void test_cli_invalid_args(void) {
 }
 
 static void test_cli_timeout_and_port(void) {
-    char *argv_timeout[] = {"pcp-server", "--timeout", "50"};
+    char *argv_timeout[] = {"pcp-server", "-p", TEST_PCP_SERVER_CLI_PORT,
+                            "--timeout", "50"};
     char *argv_negative_timeout[] = {"pcp-server", "--timeout", "-500"};
     char *argv_bad_port[] = {"pcp-server", "-p", "-1", "--timeout", "50"};
     char *argv_default_port[] = {"pcp-server", "-p", "5351", "--timeout", "50"};
@@ -277,8 +282,8 @@ static void copy_log_file_path(server_info_t *server_info, const char *path) {
     memcpy(server_info->log_file, path, len + 1);
 }
 
-static void run_logged_flow_case(const char *log_path, uint8_t version,
-                                 struct sockaddr *source,
+static void run_logged_flow_case(const char *log_path, const char *server_port,
+                                 uint8_t version, struct sockaddr *source,
                                  struct sockaddr *destination,
                                  void (*flow_setup)(pcp_flow_t *),
                                  const char *required_line_1,
@@ -292,7 +297,7 @@ static void run_logged_flow_case(const char *log_path, uint8_t version,
 
     remove_log_file(log_path);
     test_pcp_server_config_init(&server_config);
-    server_config.server_port = "5351";
+    server_config.server_port = server_port;
     server_config.server_address = "0.0.0.0";
     server_config.server_info.end_after_recv = 1;
     copy_log_file_path(&server_config.server_info, log_path);
@@ -301,7 +306,11 @@ static void run_logged_flow_case(const char *log_path, uint8_t version,
 
     ctx = pcp_init(0, NULL);
     TEST(ctx != NULL);
-    TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), version) == 0);
+    {
+        char server_arg[64];
+        snprintf(server_arg, sizeof(server_arg), "127.0.0.1:%s", server_port);
+        TEST(pcp_add_server(ctx, Sock_pton(server_arg), version) == 0);
+    }
 
     flow = pcp_new_flow(ctx, source, destination, NULL, IPPROTO_TCP, 900, NULL);
     TEST(flow != NULL);
@@ -344,29 +353,31 @@ static void test_log_file_cases(void) {
     sock_pton("127.0.0.1:1234", (struct sockaddr *)&source);
     sock_pton("127.0.0.1:8888", (struct sockaddr *)&destination);
 
-    run_logged_flow_case("test_pcp_server.log", 1, (struct sockaddr *)&source,
-                         NULL, NULL, "PCP protocol VERSION 1.",
-                         "MAP protocol:", NULL);
-    run_logged_flow_case("test_pcp_server.log", 2, (struct sockaddr *)&source,
-                         NULL, NULL, "PCP protocol VERSION 2.",
-                         "MAP protocol:", NULL);
-    run_logged_flow_case("test_pcp_server.log", 1, (struct sockaddr *)&source,
-                         (struct sockaddr *)&destination, NULL,
-                         "PCP protocol VERSION 1.",
-                         "PEER Opcode specific information.", NULL);
-    run_logged_flow_case("test_pcp_server.log", 2, (struct sockaddr *)&source,
-                         (struct sockaddr *)&destination, NULL,
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 1,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         "PCP protocol VERSION 1.", "MAP protocol:", NULL);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         "PCP protocol VERSION 2.", "MAP protocol:", NULL);
+    run_logged_flow_case(
+        "test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 1,
+        (struct sockaddr *)&source, (struct sockaddr *)&destination, NULL,
+        "PCP protocol VERSION 1.", "PEER Opcode specific information.", NULL);
+    run_logged_flow_case(
+        "test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+        (struct sockaddr *)&source, (struct sockaddr *)&destination, NULL,
+        "PCP protocol VERSION 2.", "PEER Opcode specific information.", NULL);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, setup_prefer_failure,
                          "PCP protocol VERSION 2.",
-                         "PEER Opcode specific information.", NULL);
-    run_logged_flow_case("test_pcp_server.log", 2, (struct sockaddr *)&source,
-                         NULL, setup_prefer_failure, "PCP protocol VERSION 2.",
                          "MAP protocol:", "OPTION: \t Prefer fail");
-    run_logged_flow_case("test_pcp_server.log", 2, (struct sockaddr *)&source,
-                         NULL, setup_filter, "PCP protocol VERSION 2.",
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, setup_filter,
+                         "PCP protocol VERSION 2.",
                          "MAP protocol:", "FILTER PORT:");
 }
 
-static void send_malformed_packet(void) {
+static void send_malformed_packet(const char *server_port) {
 #ifdef WIN32
     SOCKET sockfd;
 #else
@@ -380,7 +391,7 @@ static void send_malformed_packet(void) {
 
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(5351);
+    server_addr.sin_port = htons((uint16_t)atoi(server_port));
     TEST(inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr) == 1);
 
     TEST(sendto(sockfd, (const char *)payload, sizeof(payload), 0,
@@ -406,14 +417,14 @@ static void test_malformed_packet(void) {
     TEST(DUP2(FILENO(stdout_capture), stdout_fd) >= 0);
 
     test_pcp_server_config_init(&server_config);
-    server_config.server_port = "5351";
+    server_config.server_port = TEST_PCP_SERVER_MALFORMED_PORT;
     server_config.server_address = "127.0.0.1";
     server_config.server_info.end_after_recv = 1;
     TEST(pcp_test_server_start(&server, server_config.server_port,
                                server_config.server_address,
                                &server_config.server_info) == 0);
 
-    send_malformed_packet();
+    send_malformed_packet(TEST_PCP_SERVER_MALFORMED_PORT);
     TEST(pcp_test_server_pulse(&server, 1000) == 1);
     if (pcp_test_server_is_running(&server)) {
         pcp_test_server_stop(&server);
