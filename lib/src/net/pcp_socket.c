@@ -290,12 +290,14 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
         }
 #endif // IP_PKTINFO
 #ifdef IPV6_RECVPKTINFO
-        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&optval,
-                       sizeof(optval)) < 0) {
-            PCP_LOG(PCP_LOGLVL_ERR, "%s",
-                    "Unable to set IPV6_RECVPKTINFO option for socket.");
-            CLOSE(s);
-            return PCP_INVALID_SOCKET;
+        if (domain == AF_INET6) {
+            if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&optval,
+                           sizeof(optval)) < 0) {
+                PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                        "Unable to set IPV6_RECVPKTINFO option for socket.");
+                CLOSE(s);
+                return PCP_INVALID_SOCKET;
+            }
         }
 #endif // IPV6_RECVPKTINFO
     }

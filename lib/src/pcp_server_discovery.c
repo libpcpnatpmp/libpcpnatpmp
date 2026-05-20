@@ -56,7 +56,6 @@
 
 static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
     struct in6_addr src_ip;
-    uint32_t src_scope_id = 0;
     const char *err = NULL;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
@@ -104,6 +103,8 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
         return PCP_ERR_BAD_AFINET;
     }
 #else  // PCP_USE_IPV6_SOCKET
+    uint32_t src_scope_id = 0;
+
     s->pcp_server_saddr.ss_family = AF_INET6;
     if (s->af == AF_INET) {
         return PCP_ERR_BAD_AFINET; // should never happen
