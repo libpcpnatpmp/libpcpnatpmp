@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Fixed
+- Replies to a flow whose nonce was set with `pcp_flow_set_nonce()` never
+  matched it: the flow stayed filed under its old nonce. It is now filed again
+  under the new one.
+
 ## [1.0.0] - 2026-05-14
 
 ### Added

@@ -508,7 +508,14 @@ int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]) {
     }
 
     for (iter = flow; iter != NULL; iter = iter->next_child) {
+        // The flow table files a flow by a hash of its key, nonce included,
+        // and replies are looked up by theirs: file it again under the new one.
+        int was_filed = pcp_db_rem_flow(iter) == PCP_ERR_SUCCESS;
+
         memcpy(iter->kd.nonce.n, nonce_words_be, sizeof(iter->kd.nonce.n));
+        if (was_filed) {
+            pcp_db_add_flow(iter);
+        }
     }
 
     return 0;
