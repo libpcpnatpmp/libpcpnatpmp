@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
     printf("Flow result code %d \n", flow_info->pcp_result_code);
     s = get_pcp_server(ctx, flow->pcp_server_indx);
     TEST((s) && (s->pcp_version == 1));
+    TEST(flow_info->pcp_version == 1);
 
     pcp_close_flow(flow);
     pcp_delete_flow(flow);
