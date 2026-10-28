@@ -17,6 +17,9 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
   default router) got no matching replies, since its key kept the source's
   scope while each reply's key has none. Only a link-local source now keeps a
   scope, and it must still be the server's.
+- Replies to a flow whose nonce was set with `pcp_flow_set_nonce()` never
+  matched it: the flow stayed filed under its old nonce. It is now filed again
+  under the new one.
 
 ## [1.0.0] - 2026-05-14
 
