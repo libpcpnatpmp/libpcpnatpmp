@@ -26,6 +26,12 @@
  * Author: bagljas
  */
 
+// struct in6_pktinfo, for answering from the address a request was sent to
+#ifndef WIN32
+#define _GNU_SOURCE
+#define __APPLE_USE_RFC_3542
+#endif
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #else
@@ -65,6 +71,7 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -156,6 +163,14 @@ static PCP_SOCKET createPCPsocket(const char *serverPort,
         fprintf(stderr, "PCP server: failed to bind socket\n");
         exit(2);
     } // LCOV_EXCL_STOP
+
+#if !defined(WIN32) && defined(IPV6_RECVPKTINFO)
+    // learn the address each request was sent to, to answer from it
+    if (p->ai_family == AF_INET6) {
+        setsockopt(sockfd, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&yes,
+                   sizeof(yes));
+    }
+#endif
 
     freeaddrinfo(servinfo);
 
@@ -650,6 +665,84 @@ void pcp_test_server_stop(pcp_test_server_t *server) {
 #endif // WIN32
 }
 
+#if !defined(WIN32) && defined(IPV6_RECVPKTINFO)
+#define PCP_SERVER_ANSWERS_FROM_DST 1
+
+// Reads a request, and when it came over IPv6, the address and interface it
+// was sent to.
+static int recv_request(PCP_SOCKET sock, char *buf, size_t len,
+                        struct sockaddr_storage *from, socklen_t *from_len,
+                        struct in6_pktinfo *dst, int *has_dst) {
+    struct iovec iov;
+    struct msghdr msg;
+    struct cmsghdr *cmsg;
+    char control[CMSG_SPACE(sizeof(struct in6_pktinfo))];
+    ssize_t n;
+
+    iov.iov_base = buf;
+    iov.iov_len = len;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_name = from;
+    msg.msg_namelen = *from_len;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = control;
+    msg.msg_controllen = sizeof(control);
+
+    *has_dst = 0;
+    n = recvmsg(sock, &msg, 0);
+    if (n < 0) {
+        return PCP_SOCKET_ERROR;
+    }
+    *from_len = msg.msg_namelen;
+
+    for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+         cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+        if (cmsg->cmsg_level == IPPROTO_IPV6 &&
+            cmsg->cmsg_type == IPV6_PKTINFO) {
+            memcpy(dst, CMSG_DATA(cmsg), sizeof(*dst));
+            *has_dst = 1;
+        }
+    }
+    return (int)n;
+}
+
+// Answers from the address the request was sent to. A client knows its
+// server by that address, and drops a reply from any other: one that asked a
+// link-local address would never hear from a server bound to "::".
+static void send_reply(PCP_SOCKET sock, const char *buf, size_t len,
+                       struct sockaddr_storage *to, socklen_t to_len,
+                       const struct in6_pktinfo *src, int has_src) {
+    struct iovec iov;
+    struct msghdr msg;
+    char control[CMSG_SPACE(sizeof(struct in6_pktinfo))];
+
+    iov.iov_base = (void *)buf;
+    iov.iov_len = len;
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_name = to;
+    msg.msg_namelen = to_len;
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+
+    // an IPv4 request on the dual-stack socket goes back the plain way
+    if (has_src && !IN6_IS_ADDR_V4MAPPED(&src->ipi6_addr)) {
+        struct cmsghdr *cmsg;
+
+        memset(control, 0, sizeof(control));
+        msg.msg_control = control;
+        msg.msg_controllen = sizeof(control);
+        cmsg = CMSG_FIRSTHDR(&msg);
+        cmsg->cmsg_level = IPPROTO_IPV6;
+        cmsg->cmsg_type = IPV6_PKTINFO;
+        cmsg->cmsg_len = CMSG_LEN(sizeof(*src));
+        memcpy(CMSG_DATA(cmsg), src, sizeof(*src));
+    }
+
+    sendmsg(sock, &msg, 0);
+}
+#endif
+
 int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
     int numbytes;
     int pcp_result_code;
@@ -719,9 +812,17 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
         time_t recvtime = 0;
 
         addr_len = sizeof their_addr;
+#ifdef PCP_SERVER_ANSWERS_FROM_DST
+        struct in6_pktinfo dst;
+        int has_dst = 0;
+        if ((numbytes = recv_request(server->sockfd, buf, PCP_MAX_LEN - 1,
+                                     &their_addr, &addr_len, &dst, &has_dst)) ==
+            PCP_SOCKET_ERROR) { // LCOV_EXCL_START
+#else
         if ((numbytes = recvfrom(server->sockfd, buf, PCP_MAX_LEN - 1, 0,
                                  (struct sockaddr *)&their_addr, &addr_len)) ==
             PCP_SOCKET_ERROR) { // LCOV_EXCL_START
+#endif
             perror("recvfrom");
             return -1;
         } // LCOV_EXCL_STOP
@@ -744,8 +845,13 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
                             : server->server_info.default_result_code,
                         &server->server_info);
 
+#ifdef PCP_SERVER_ANSWERS_FROM_DST
+        send_reply(server->sockfd, buf, (size_t)numbytes, &their_addr, addr_len,
+                   &dst, has_dst);
+#else
         sendto(server->sockfd, buf, numbytes, 0, (struct sockaddr *)&their_addr,
                addr_len);
+#endif
 
         reset_option_occur(&opt_occurence);
         printf("\n");
