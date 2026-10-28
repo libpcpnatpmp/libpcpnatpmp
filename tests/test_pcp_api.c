@@ -154,6 +154,30 @@ int main(void) {
     pcp_terminate(ctx, 1);
     TEST(ctx->pcp_db.flow_cnt == 0);
 
+    // regression test: a global source keeps no scope, whatever the caller
+    // passed, since replies arrive at a global address and carry none; only
+    // a link-local source has one, which must be the server's
+    {
+        struct sockaddr_in6 global_src;
+        struct sockaddr_in6 link_local_src;
+
+        memcpy(&global_src, Sock_pton("[2001:db8::1]:1234"),
+               sizeof(global_src));
+        global_src.sin6_scope_id = 1;
+        memcpy(&link_local_src, Sock_pton("[fe80::2]:1234"),
+               sizeof(link_local_src));
+        link_local_src.sin6_scope_id = 2;
+
+        ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        TEST(pcp_add_server(ctx, Sock_pton("[::1]:5351"), 2) == 0);
+        TEST((f1 = pcp_new_flow(ctx, (struct sockaddr *)&global_src, NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(f1->kd.scope_id == 0);
+        TEST(pcp_new_flow(ctx, (struct sockaddr *)&link_local_src, NULL, NULL,
+                          IPPROTO_TCP, 100, NULL) == NULL);
+        pcp_terminate(ctx, 1);
+    }
+
     printf("Tests succeeded.\n\n");
 
     PD_SOCKET_CLEANUP();

@@ -364,9 +364,16 @@ static int chain_and_assign_src_ip(pcp_server_t *s, void *data) {
         return 0;
     }
 
-    // check matching scope
-    if (kd.scope_id != s->pcp_scope_id) {
-        return 0;
+    // Only a link-local source has a scope, and it must be the server's.
+    // A reply's key takes the scope of the address it arrived at, which a
+    // global source has none of, so its flow keeps none either: otherwise
+    // no reply from a link-local server would ever match it.
+    if (IN6_IS_ADDR_LINKLOCAL(&kd.src_ip)) {
+        if (kd.scope_id != s->pcp_scope_id) {
+            return 0;
+        }
+    } else {
+        kd.scope_id = 0;
     }
 
     memcpy(&kd.pcp_server_ip, s->pcp_ip, sizeof(kd.pcp_server_ip));
