@@ -24,6 +24,9 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
   whatever address routing picked rather than the one asked, so a client that
   asked its link-local address dropped every answer. It now answers from the
   address each request was sent to.
+- A NAT-PMP reply, which carries no nonce, never matched a flow whose nonce
+  was set with `pcp_flow_set_nonce()`: it is looked up under the server's
+  nonce. A flow to a server that speaks NAT-PMP now keeps the server's nonce.
 
 ## [1.0.0] - 2026-05-14
 
