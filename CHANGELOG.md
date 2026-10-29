@@ -33,6 +33,10 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 - A flow failed by a long lifetime error, such as NOT_AUTHORIZED, dropped
   the error's lifetime, which says how long the server will keep refusing.
   `pcp_flow_get_info()` now reports it as `recv_lifetime_end`.
+- A short lifetime error, such as NO_RESOURCES, answered with lifetime 0 was
+  resent at once, over and over. The flow now waits at least
+  `PCP_MIN_ERROR_WAIT` seconds (30 by default, the lifetime RFC 6887
+  recommends for a short lifetime error) before resending.
 
 ## [1.0.0] - 2026-05-14
 
