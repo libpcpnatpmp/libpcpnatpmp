@@ -508,6 +508,12 @@ int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]) {
     }
 
     for (iter = flow; iter != NULL; iter = iter->next_child) {
+        pcp_server_t *s = get_pcp_server(iter->ctx, iter->pcp_server_indx);
+
+        // NAT-PMP has no nonce: its answers are looked up under the server's
+        if (s && s->pcp_version == 0) {
+            continue;
+        }
         memcpy(iter->kd.nonce.n, nonce_words_be, sizeof(iter->kd.nonce.n));
     }
 

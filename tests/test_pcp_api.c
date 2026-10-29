@@ -154,6 +154,29 @@ int main(void) {
     pcp_terminate(ctx, 1);
     TEST(ctx->pcp_db.flow_cnt == 0);
 
+    // a flow to a NAT-PMP server keeps the server's nonce, under which the
+    // answers, which carry none, are looked up
+    {
+        uint32_t nonce_words_be[3] = {htonl(0x00112233), htonl(0x44556677),
+                                      htonl(0x8899aabb)};
+        pcp_server_t *natpmp;
+
+        ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5351"), 2) == 1);
+        natpmp = get_pcp_server(ctx, 1);
+        natpmp->pcp_version = 0;
+        TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(f1->next_child != NULL);
+        TEST(pcp_flow_set_nonce(f1, nonce_words_be) == 0);
+        TEST(memcmp(f1->kd.nonce.n, nonce_words_be, sizeof(f1->kd.nonce.n)) ==
+             0);
+        TEST(memcmp(&f1->next_child->kd.nonce, &natpmp->nonce,
+                    sizeof(natpmp->nonce)) == 0);
+        pcp_terminate(ctx, 1);
+    }
+
     printf("Tests succeeded.\n\n");
 
     PD_SOCKET_CLEANUP();

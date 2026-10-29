@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Fixed
+- A NAT-PMP reply, which carries no nonce, never matched a flow whose nonce
+  was set with `pcp_flow_set_nonce()`: it is looked up under the server's
+  nonce. A flow to a server that speaks NAT-PMP now keeps the server's nonce.
+
 ## [1.0.0] - 2026-05-14
 
 ### Added
