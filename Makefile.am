@@ -86,5 +86,6 @@ TESTS = tests/test_flow_notify \
         tests/test_pcp_logger \
         tests/test_pcp_msg \
         tests/test_server_reping \
+        tests/test_error_lifetime \
         $(PCP_SADSCP_TESTS) \
         $(PCP_EXPERIMENTAL_TESTS)

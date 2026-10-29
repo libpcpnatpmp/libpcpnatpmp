@@ -255,6 +255,8 @@ typedef struct pcp_flow_info {
     struct in6_addr pcp_server_ip;
     struct in6_addr ext_ip;
     uint16_t ext_port; // network byte order
+    // When the mapping's lifetime ends. For pcp_state_failed with a result
+    // code: when the server stops refusing, by the error's lifetime.
     time_t recv_lifetime_end;
     time_t lifetime_renew_s;
     uint8_t pcp_result_code;
