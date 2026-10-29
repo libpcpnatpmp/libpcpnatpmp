@@ -30,6 +30,9 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 - PCP version 1 replies also carry no nonce. Flows now keep the server's nonce
   when negotiating down to version 1, and `pcp_flow_set_nonce()` leaves those
   flows unchanged, including builds without NAT-PMP support.
+- A flow failed by a long lifetime error, such as NOT_AUTHORIZED, dropped
+  the error's lifetime, which says how long the server will keep refusing.
+  `pcp_flow_get_info()` now reports it as `recv_lifetime_end`.
 
 ## [1.0.0] - 2026-05-14
 
