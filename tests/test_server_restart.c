@@ -27,7 +27,9 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 #endif
 #include "pcpnatpmp.h"
@@ -42,13 +44,17 @@
 pcp_flow_t *flow_to_wait = NULL;
 uint32_t notified = 0;
 
+#define LOG_BEFORE_RESTART "test_server_restart_before.log"
+#define LOG_AFTER_RESTART "test_server_restart_after.log"
+
 typedef struct server_thread_args {
     uint8_t second_server_requests;
 } server_thread_args_t;
 
-static void init_server_info(server_info_t *server_info,
-                             uint8_t end_after_recv) {
+static void init_server_info(server_info_t *server_info, uint8_t end_after_recv,
+                             const char *log_file) {
     memset(server_info, 0, sizeof(*server_info));
+    strncpy(server_info->log_file, log_file, sizeof(server_info->log_file) - 1);
     server_info->server_version = 2;
     server_info->default_result_code = 255;
     server_info->end_after_recv = end_after_recv;
@@ -62,11 +68,14 @@ static void *server_thread_main(void *arg) {
     server_thread_args_t *args = (server_thread_args_t *)arg;
     server_info_t server_info;
 
-    init_server_info(&server_info, 1);
+    init_server_info(&server_info, 1, LOG_BEFORE_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
     server_info.epoch_time_start = time(NULL);
     execPCPServer("5351", "0.0.0.0", &server_info);
 
-    init_server_info(&server_info, args->second_server_requests);
+    init_server_info(&server_info, args->second_server_requests,
+                     LOG_AFTER_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
     server_info.epoch_time_start = time(NULL);
     execPCPServer("5351", "0.0.0.0", &server_info);
 
@@ -84,6 +93,92 @@ static void notify_cb_1(pcp_flow_t *f, struct sockaddr *src_addr UNUSED,
         notified = 1;
     }
     sleep(1);
+}
+
+static char *read_whole_file(const char *path) {
+    FILE *f = fopen(path, "rb");
+    long size;
+    char *buf;
+
+    TEST(f != NULL);
+    fseek(f, 0, SEEK_END);
+    size = ftell(f);
+    rewind(f);
+    buf = malloc((size_t)size + 1);
+    TEST(buf != NULL);
+    TEST(fread(buf, 1, (size_t)size, f) == (size_t)size);
+    buf[size] = 0;
+    fclose(f);
+    return buf;
+}
+
+/* Copy of a server log without its "requested lifetime" and external address
+ * lines. A client may re-send a reservation with the lifetime it has left, and
+ * renews with the external address the server assigned instead of the one it
+ * first suggested; nothing else about the reservation may change. */
+static char *without_lifetime(const char *log) {
+    char *out = malloc(strlen(log) + 1);
+    char *w = out;
+    const char *line = log;
+
+    TEST(out != NULL);
+    while (*line) {
+        const char *eol = strchr(line, '\n');
+        size_t len = eol ? (size_t)(eol - line) + 1 : strlen(line);
+        if (strncmp(line, "PCP requested lifetime:", 23) != 0 &&
+            strncmp(line, "MAP Ext IP:", 11) != 0 &&
+            strncmp(line, "External IP:", 12) != 0) {
+            memcpy(w, line, len);
+            w += len;
+        }
+        line += len;
+    }
+    *w = 0;
+    return out;
+}
+
+/* Rapid Recovery (RFC 6887, 8.5): after the server restarts, every request
+ * the old server had seen must come back unchanged: same protocol, internal
+ * and external port, external address and, because it is the same mapping,
+ * the same nonce. */
+static void check_reservations_resent(const char *const *must_appear) {
+    char *before = read_whole_file(LOG_BEFORE_RESTART);
+    char *after = read_whole_file(LOG_AFTER_RESTART);
+    char *before_n = without_lifetime(before);
+    char *after_n = without_lifetime(after);
+    char *rec = strstr(before_n, "PCP version:");
+    int records = 0;
+
+    while (rec != NULL) {
+        char *next = strstr(rec + 1, "PCP version:");
+        size_t len = next ? (size_t)(next - rec) : strlen(rec);
+        char *copy = malloc(len + 1);
+
+        TEST(copy != NULL);
+        memcpy(copy, rec, len);
+        copy[len] = 0;
+        if (strstr(after_n, copy) == NULL) {
+            printf("not re-sent after restart:\n%s\nlog after restart:\n%s\n",
+                   copy, after);
+            TEST(0);
+        }
+        free(copy);
+        records++;
+        rec = next;
+    }
+    TEST(records >= 1);
+    /* the address the first server assigned is the one asked for again */
+    TEST(strstr(after, "MAP Ext IP: \t\t ::ffff:9.9.9.9") != NULL);
+    for (; *must_appear != NULL; must_appear++) {
+        if (strstr(after, *must_appear) == NULL) {
+            printf("log after restart lacks '%s':\n%s\n", *must_appear, after);
+            TEST(0);
+        }
+    }
+    free(before);
+    free(after);
+    free(before_n);
+    free(after_n);
 }
 
 static int run_scenario(uint8_t second_server_requests, int expect_success) {
@@ -108,6 +203,8 @@ static int run_scenario(uint8_t second_server_requests, int expect_success) {
 #endif
 
     thread_args.second_server_requests = second_server_requests;
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
 
 #ifdef WIN32
     thread_handle =
@@ -189,8 +286,107 @@ static int run_scenario(uint8_t second_server_requests, int expect_success) {
     pthread_join(thread, NULL);
 #endif
 
+    if (expect_success) {
+        static const char *const must_appear[] = {
+            "MAP int port: \t\t 2222", "MAP int port: \t\t 1111", NULL};
+        check_reservations_resent(must_appear);
+    }
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
+
     return 0;
 }
+
+#ifndef WIN32 /* the scenario below uses pthreads and select() */
+static void *reservation_server_main(void *arg UNUSED) {
+    server_info_t server_info;
+
+    /* before the restart: answers the three reservations, then goes away */
+    init_server_info(&server_info, 3, LOG_BEFORE_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
+    server_info.epoch_time_start = time(NULL);
+    execPCPServer("5351", "0.0.0.0", &server_info);
+
+    /* after the restart: epoch starts again; logs until it times out */
+    init_server_info(&server_info, 0, LOG_AFTER_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
+    server_info.tv.tv_sec = 14;
+    server_info.epoch_time_start = time(NULL);
+    execPCPServer("5351", "0.0.0.0", &server_info);
+    return NULL;
+}
+
+/* MAP, MAP with a FILTER option and PEER reservations all come back, with
+ * their options, when the server restarts. */
+static void run_reservation_scenario(void) {
+    struct sockaddr_storage src[3], dst, filter_ip;
+    pcp_flow_t *flow[3];
+    pcp_ctx_t *ctx;
+    pthread_t thread;
+    struct timeval end, now;
+    int i;
+    static const char *const must_appear[] = {
+        "MAP int port: \t\t 3001",
+        "MAP int port: \t\t 3002",
+        "OPTION: \t Filter",
+        "PREFIX: 12",
+        "FILTER PORT: 4444",
+        "PEER Opcode specific information.",
+        "Internal port: \t\t 3003",
+        "PEER port: \t\t 8888",
+        "MAP Ext IP: \t\t ::ffff:9.9.9.9",
+        NULL};
+
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
+    TEST(pthread_create(&thread, NULL, reservation_server_main, NULL) == 0);
+    sleep(1);
+
+    ctx = pcp_init(0, NULL);
+    TEST(ctx);
+    TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+    sock_pton("127.0.0.1:3001", (struct sockaddr *)&src[0]);
+    sock_pton("127.0.0.1:3002", (struct sockaddr *)&src[1]);
+    sock_pton("127.0.0.1:3003", (struct sockaddr *)&src[2]);
+    sock_pton("127.0.0.1:8888", (struct sockaddr *)&dst);
+    sock_pton("8.8.8.8:4444", (struct sockaddr *)&filter_ip);
+
+    flow[0] = pcp_new_flow(ctx, (struct sockaddr *)&src[0], NULL, NULL,
+                           IPPROTO_TCP, 10, NULL);
+    flow[1] = pcp_new_flow(ctx, (struct sockaddr *)&src[1], NULL, NULL,
+                           IPPROTO_UDP, 10, NULL);
+    pcp_flow_set_filter_opt(flow[1], (struct sockaddr *)&filter_ip, 12);
+    flow[2] =
+        pcp_new_flow(ctx, (struct sockaddr *)&src[2], (struct sockaddr *)&dst,
+                     NULL, IPPROTO_TCP, 10, NULL);
+    for (i = 0; i < 3; i++) {
+        TEST(flow[i] != NULL);
+        TEST(pcp_wait(flow[i], 3000, 0) == pcp_state_succeeded);
+    }
+
+    /* renewals go to the restarted server, which makes the client re-send
+     * every reservation */
+    gettimeofday(&end, NULL);
+    end.tv_sec += 12;
+    do {
+        struct timeval tout = {0, 50000};
+        pcp_pulse(ctx, &tout);
+        select(0, NULL, NULL, NULL, &tout);
+        gettimeofday(&now, NULL);
+    } while (timercmp(&now, &end, <));
+
+    for (i = 0; i < 3; i++) {
+        pcp_close_flow(flow[i]);
+        pcp_delete_flow(flow[i]);
+    }
+    pcp_terminate(ctx, 0);
+    pthread_join(thread, NULL);
+
+    check_reservations_resent(must_appear);
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
+}
+#endif /* !WIN32 */
 
 int main(void) {
 
@@ -199,6 +395,9 @@ int main(void) {
 
     run_scenario(2, 1);
     run_scenario(1, 0);
+#ifndef WIN32
+    run_reservation_scenario();
+#endif
 
     PD_SOCKET_CLEANUP();
     return 0;
