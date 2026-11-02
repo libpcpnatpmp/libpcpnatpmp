@@ -581,6 +581,9 @@ static int create_response(char *request, int pcp_result_code,
     resp->result_code = (uint8_t)pcp_result_code;
     resp->epochtime =
         htonl((uint32_t)(time(NULL) - server_info->epoch_time_start));
+    if (server_info->override_lifetime) {
+        resp->lifetime = htonl(server_info->lifetime);
+    }
 
     if (pcp_result_code == PCP_RES_UNSUPP_VERSION) {
         resp->ver = server_info->server_version;

@@ -19,7 +19,8 @@ check_PROGRAMS = test_server_restart \
                  test_sock_ntop \
                  test_pcp_logger \
                  test_pcp_msg \
-                 test_server_reping
+                 test_server_reping \
+                 test_short_error_wait
 
 noinst_HEADERS = test_macro.h test_pcp_server_helper.h test_process_helper.h
 
@@ -107,3 +108,7 @@ test_pcp_msg_LDFLAGS = -static
 test_server_reping_SOURCES = test_server_reping.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_server_reping_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_server_reping_LDFLAGS = -static
+
+test_short_error_wait_SOURCES = test_short_error_wait.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_short_error_wait_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_short_error_wait_LDFLAGS = -static

@@ -63,6 +63,14 @@
 
 #define MIN(a, b) (a < b ? a : b)
 #define MAX(a, b) (a > b ? a : b)
+
+/* Shortest wait, in seconds, before resending after a short lifetime error:
+ * the lifetime RFC 6887 recommends for one. A server that answers with a
+ * shorter lifetime, or 0, would otherwise be asked again at once, over and
+ * over. */
+#ifndef PCP_MIN_ERROR_WAIT
+#define PCP_MIN_ERROR_WAIT 30
+#endif
 #define PCP_RT(rtprev)                                                         \
     ((rtprev = rtprev << 1),                                                   \
      (((8192 + (1024 - (rand() & 2047))) *                                     \
@@ -473,7 +481,7 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     f->recv_result = msg->recv_result;
 
     gettimeofday(&f->timeout, NULL);
-    f->timeout.tv_sec += msg->recv_lifetime;
+    f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
 
     return fev_none;
 }
