@@ -90,6 +90,12 @@ int pcp_add_server(pcp_ctx_t *ctx, struct sockaddr *pcp_server,
     return res;
 }
 
+void pcp_set_restart_delay(pcp_ctx_t *ctx, uint32_t max_ms) {
+    if (ctx) {
+        ctx->restart_delay_max_ms = max_ms;
+    }
+}
+
 pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt) {
     pcp_ctx_t *ctx = (pcp_ctx_t *)calloc(1, sizeof(pcp_ctx_t));
 
@@ -101,6 +107,8 @@ pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt) {
         PCP_LOG_END(PCP_LOGLVL_DEBUG);
         return NULL;
     }
+
+    ctx->restart_delay_max_ms = PCP_RESTART_MAX_DELAY_MS;
 
     if (socket_vt) {
         ctx->virt_socket_tb = socket_vt;
