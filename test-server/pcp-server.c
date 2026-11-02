@@ -195,6 +195,8 @@ static void print_MAP_opcode_ver1(pcp_map_v1_t *map_buf, FILE *log_file) {
 static void print_MAP_opcode_ver2(pcp_map_v2_t *map_buf, FILE *log_file) {
     char map_addr[INET6_ADDRSTRLEN];
     DUPPRINT(log_file, "PCP protocol VERSION 2. \n");
+    DUPPRINT(log_file, "Nonce: \t\t %08x%08x%08x\n", ntohl(map_buf->nonce.n[0]),
+             ntohl(map_buf->nonce.n[1]), ntohl(map_buf->nonce.n[2]));
     DUPPRINT(log_file, "MAP protocol: \t\t %d\n", map_buf->protocol);
     DUPPRINT(log_file, "MAP int port: \t\t %d\n", ntohs(map_buf->int_port));
     DUPPRINT(log_file, "MAP ext port: \t\t %d\n", ntohs(map_buf->ext_port));
@@ -227,6 +229,9 @@ static void print_PEER_opcode_ver2(pcp_peer_v2_t *peer_buf, FILE *log_file) {
 
     DUPPRINT(log_file, "PCP protocol VERSION 2. \n");
     DUPPRINT(log_file, "PEER Opcode specific information. \n");
+    DUPPRINT(log_file, "Nonce: \t\t %08x%08x%08x\n",
+             ntohl(peer_buf->nonce.n[0]), ntohl(peer_buf->nonce.n[1]),
+             ntohl(peer_buf->nonce.n[2]));
     DUPPRINT(log_file, "Protocol: \t\t %d\n", peer_buf->protocol);
     DUPPRINT(log_file, "Internal port: \t\t %d\n", ntohs(peer_buf->int_port));
     DUPPRINT(log_file, "External IP: \t\t %s\n",
@@ -447,7 +452,7 @@ static int printPCPreq(void *req, int req_size, options_occur_t *opt_occ,
 #else
         umask(0);
 #endif
-        CHECK_NULL_EXIT((log_file = fopen(server_log_file, "w+")));
+        CHECK_NULL_EXIT((log_file = fopen(server_log_file, "a+")));
         // filefd = open(server_log_file, O_CREAT | O_SYNC | O_RDWR | O_TRUNC,
         // S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     }
@@ -585,7 +590,9 @@ static int printPCPreq(void *req, int req_size, options_occur_t *opt_occ,
     } else {
         return PCP_RES_UNSUPP_VERSION;
     }
-    fflush(log_file);
+    if (log_file != NULL) {
+        fclose(log_file);
+    }
     return pcp_return_val;
 }
 
