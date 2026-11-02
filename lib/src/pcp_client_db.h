@@ -120,6 +120,8 @@ struct pcp_ctx_s {
     unsigned pace_new;
     unsigned pace_inflight;
     struct timeval pace_window_end;
+    // longest random wait before re-sending after a server restart
+    uint32_t restart_delay_max_ms;
 };
 
 struct pcp_flow_s {
@@ -230,6 +232,9 @@ struct pcp_server {
     // the library's socket is not on port 5350: listening there on this one
     uint8_t announce_listening;
     PCP_SOCKET announce_socket;
+    // re-sending after a restart is waiting for restart_resend_at
+    uint8_t restart_pending;
+    struct timeval restart_resend_at;
     void *app_data;
 };
 

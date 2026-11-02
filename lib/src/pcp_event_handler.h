@@ -28,6 +28,11 @@
 
 #include "pcp_msg_structs.h"
 
+/* Longest random wait before re-sending after a server restart, in ms */
+#ifndef PCP_RESTART_MAX_DELAY_MS
+#define PCP_RESTART_MAX_DELAY_MS 5000
+#endif
+
 typedef enum {
     pfs_any = -1,
     pfs_idle = 0,

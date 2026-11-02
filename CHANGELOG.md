@@ -10,6 +10,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 
 - `pcp_flow_info_t.pcp_version`: the protocol version spoken with the flow's
   server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
+- `pcp_set_restart_delay()`: the longest random wait before re-sending after a server restart (default 5000 ms, 0 turns it off).
 
 ### Fixed
 
@@ -43,6 +44,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
   waiting.
 - Restart announcements an IPv4 PCP server sends to 224.0.0.1 port 5350 never reached the client on Linux: its IPv6 socket had not joined the group. The library now joins 224.0.0.1 and ff02::1 on the interface of each server's source address, also for servers found by autodiscovery, when it made the socket itself, and logs a warning when it cannot.
 - A client that could not have port 5350, because another client on the host had it, never received restart announcements, which servers send to 5350 only. It now listens on 5350 beside the other client, on a socket bound to the group address, and the client holding 5350 lets other programs share the port.
+- After a server restart every client of it re-sent its mappings at once. A client now waits a random time of up to 5 seconds first (RFC 6887, 14.2.1).
 
 ## [1.0.0] - 2026-05-14
 

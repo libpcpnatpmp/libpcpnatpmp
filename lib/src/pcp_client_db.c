@@ -126,6 +126,11 @@ pcp_errno pcp_delete_flow_intern(pcp_flow_t *f) {
         (s->ping_flow_msg == f)) {
         s->ping_flow_msg = NULL;
     }
+    if ((f->pcp_server_indx != PCP_INV_SERVER) &&
+        ((s = get_pcp_server(f->ctx, f->pcp_server_indx)) != NULL) &&
+        (s->restart_flow_msg == f)) {
+        s->restart_flow_msg = NULL;
+    }
 
     free(f);
     return PCP_ERR_SUCCESS;
