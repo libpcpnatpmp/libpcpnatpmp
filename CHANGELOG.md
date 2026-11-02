@@ -46,6 +46,13 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 - A client that could not have port 5350, because another client on the host had it, never received restart announcements, which servers send to 5350 only. It now listens on 5350 beside the other client, on a socket bound to the group address, and the client holding 5350 lets other programs share the port.
 - After a server restart every client of it re-sent its mappings at once. A client now waits a random time of up to 5 seconds first (RFC 6887, 14.2.1).
 
+### Changed
+- Bumped the project version to `2.0.0` and the shared-library ABI version to
+  `2` in both CMake and autotools. Appending `pcp_version` changes the size of
+  `pcp_flow_info_t`, breaking binary compatibility with `1.x`, including
+  iteration over arrays returned by `pcp_flow_get_info()`. Applications must
+  be rebuilt against the new headers and library.
+
 ## [1.0.0] - 2026-05-14
 
 ### Added
