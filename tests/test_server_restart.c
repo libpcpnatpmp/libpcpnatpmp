@@ -218,6 +218,8 @@ static int run_scenario(uint8_t second_server_requests, int expect_success) {
 
     ctx = pcp_init(0, NULL);
     TEST(ctx);
+    /* these tests are about what is re-sent, not when */
+    pcp_set_restart_delay(ctx, 0);
     pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2);
 
     sock_pton("0.0.0.0:0", (struct sockaddr *)&destination1_ip4);
