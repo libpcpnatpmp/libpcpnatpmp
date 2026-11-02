@@ -115,6 +115,11 @@ struct pcp_ctx_s {
     void *flow_change_cb_arg;
     pcp_recv_msg_t msg;
     pcp_socket_vt_t *virt_socket_tb;
+    // send pacing: requests sent in the current window, and when it ends
+    unsigned pace_sent;
+    unsigned pace_new;
+    unsigned pace_inflight;
+    struct timeval pace_window_end;
 };
 
 struct pcp_flow_s {
@@ -151,6 +156,8 @@ struct pcp_flow_s {
     uint32_t pcp_server_indx;
     pcp_flow_state_e state;
     uint32_t resend_timeout;
+    // a retransmission was put off by send pacing; keep its backoff
+    uint8_t resend_deferred;
     uint32_t retry_count;
     uint32_t to_send_count;
     struct timeval timeout;
