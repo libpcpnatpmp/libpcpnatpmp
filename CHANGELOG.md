@@ -10,6 +10,13 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 - `pcp_flow_info_t.pcp_version`: the protocol version spoken with the flow's
   server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
 
+### Changed
+- Bumped the project version to `2.0.0` and the shared-library ABI version to
+  `2` in both CMake and autotools. Appending `pcp_version` changes the size of
+  `pcp_flow_info_t`, breaking binary compatibility with `1.x`, including
+  iteration over arrays returned by `pcp_flow_get_info()`. Applications must
+  be rebuilt against the new headers and library.
+
 ## [1.0.0] - 2026-05-14
 
 ### Added
