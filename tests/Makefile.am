@@ -22,7 +22,8 @@ check_PROGRAMS = test_server_restart \
                  test_server_reping \
                  test_error_lifetime \
                  test_short_error_wait \
-                 test_multicast_announce
+                 test_multicast_announce \
+                 test_filter_close
 
 noinst_HEADERS = test_macro.h test_pcp_server_helper.h test_process_helper.h
 
@@ -53,6 +54,10 @@ test_pcp_server_LDFLAGS = -static
 test_multicast_announce_SOURCES = test_multicast_announce.c
 test_multicast_announce_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_multicast_announce_LDFLAGS = -static
+
+test_filter_close_SOURCES = test_filter_close.c
+test_filter_close_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_filter_close_LDFLAGS = -static
 
 test_server_restart_SOURCES = test_server_restart.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_server_restart_LDADD = $(top_builddir)/lib/libpcpnatpmp.la -lpthread
