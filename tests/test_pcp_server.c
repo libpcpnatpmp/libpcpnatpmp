@@ -484,7 +484,7 @@ static void test_log_file_cases(void) {
     static const char *const filter[] = {"PCP protocol VERSION 2.",
                                          "MAP int port: \t\t 1234",
                                          "OPTION: \t Filter",
-                                         "PREFIX: 12",
+                                         "PREFIX: 108",
                                          "FILTER PORT: 4444",
                                          "FILTER IP: ",
                                          "8.8.8.8",

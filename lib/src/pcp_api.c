@@ -579,7 +579,14 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
         }
         pcp_fill_in6_addr(&fiter->filter_ip, &fiter->filter_port, NULL,
                           filter_ip);
-        fiter->filter_prefix = filter_prefix;
+        /* RFC 6887 section 13.3: the address is sent IPv4-mapped, so an IPv4
+         * prefix length goes on the wire plus 96 (valid: 96 to 128). */
+        if (filter_ip && filter_ip->sa_family == AF_INET &&
+            filter_prefix <= 32) {
+            fiter->filter_prefix = filter_prefix + 96;
+        } else {
+            fiter->filter_prefix = filter_prefix;
+        }
         pcp_flow_updated(fiter);
     }
 }

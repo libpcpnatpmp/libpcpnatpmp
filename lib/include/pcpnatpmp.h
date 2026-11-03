@@ -214,7 +214,9 @@ int pcp_flow_set_location(pcp_flow_t *f, pcp_location_option_p loc);
 #endif
 
 /*
- * Append filter option.
+ * Append filter option. filter_prefix is the prefix length of filter_ip: for
+ * an IPv4 address 0 to 32 (sent as 96 to 128, RFC 6887 section 13.3), for an
+ * IPv6 address 0 to 128.
  */
 void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                              uint8_t filter_prefix);
