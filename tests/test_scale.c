@@ -43,6 +43,7 @@
 #include "pcpnatpmp.h"
 
 #include "pcp-server.h"
+#include "pcp_client_db.h"
 #include "pcp_msg_structs.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
@@ -311,6 +312,40 @@ int main(int argc, char **argv) {
     TEST(sent_map == n - n / 3);
     TEST(sent_with_options >= n / 3);
     TEST(sent_peer >= n / 3);
+
+    /* Make every renewal due together and check that one pulse is paced. */
+    for (i = 0; i < n; ++i) {
+        flows[i]->timeout.tv_sec = 1;
+        flows[i]->timeout.tv_usec = 0;
+    }
+    get_pcp_server(ctx, 0)->next_timeout = flows[0]->timeout;
+    before = sent_total;
+    {
+        struct timeval timeout = {0, 0};
+        pcp_pulse(ctx, &timeout);
+    }
+    TEST(sent_total - before < n);
+    for (i = 0; i < n; ++i) {
+        TEST(flows[i]->recv_lifetime > time(NULL));
+    }
+
+    /* Finish the renewals before restarting the server. */
+    {
+        double deadline = now_s() + PHASE_TIMEOUT_S;
+        size_t pending;
+        do {
+            struct timeval timeout = {0, 0};
+            pcp_pulse(ctx, &timeout);
+            pending = 0;
+            for (i = 0; i < n; ++i) {
+                if (flows[i]->state == pfs_send_renew ||
+                    flows[i]->timeout.tv_sec < time(NULL) + 100) {
+                    ++pending;
+                }
+            }
+        } while (pending && now_s() < deadline);
+        TEST(pending == 0);
+    }
 
     /* The server restarts and its epoch starts again from zero. One
      * refreshed flow gets a reply with the lower epoch; the client must then

@@ -633,6 +633,10 @@ static pcp_flow_event_e fhndl_send_renew(pcp_flow_t *f,
         return fev_failed;
     }
 
+    if (pace_defer(f, 0)) {
+        return fev_none;
+    }
+
     if (pcp_flow_send_msg(f, s) != PCP_ERR_SUCCESS) {
         return fev_failed;
     }
