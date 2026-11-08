@@ -823,16 +823,17 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
         time_t recvtime = 0;
 
         addr_len = sizeof their_addr;
+        // LCOV_EXCL_START
 #ifdef PCP_SERVER_ANSWERS_FROM_DST
         struct in6_pktinfo dst;
         int has_dst = 0;
         if ((numbytes = recv_request(server->sockfd, buf, PCP_MAX_LEN - 1,
                                      &their_addr, &addr_len, &dst, &has_dst)) ==
-            PCP_SOCKET_ERROR) { // LCOV_EXCL_START
+            PCP_SOCKET_ERROR) {
 #else
         if ((numbytes = recvfrom(server->sockfd, buf, PCP_MAX_LEN - 1, 0,
                                  (struct sockaddr *)&their_addr, &addr_len)) ==
-            PCP_SOCKET_ERROR) { // LCOV_EXCL_START
+            PCP_SOCKET_ERROR) {
 #endif
             perror("recvfrom");
             return -1;
