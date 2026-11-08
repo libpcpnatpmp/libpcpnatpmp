@@ -462,6 +462,11 @@ static int count_waiting_iter(pcp_flow_t *f, void *data) {
 // returns 1 if the flow may not send now; its timeout is then set to the end
 // of the current window
 static int pace_defer(pcp_flow_t *f, int first_transmission) {
+    pcp_server_t *server = get_pcp_server(f->ctx, f->pcp_server_indx);
+    if (server && server->restart_pending) {
+        f->timeout = server->restart_resend_at;
+        return 1;
+    }
 #if PCP_PACE_BURST > 0
     pcp_ctx_t *ctx = f->ctx;
     struct timeval now;
@@ -853,6 +858,18 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
 static int check_flow_timeout(pcp_flow_t *f, void *timeout) {
     struct timeval *tout = timeout;
     struct timeval ctv;
+    pcp_server_t *server = get_pcp_server(f->ctx, f->pcp_server_indx);
+
+    if (server && server->restart_pending) {
+        struct timeval remaining;
+        gettimeofday(&ctv, NULL);
+        timeval_subtract(&remaining, &server->restart_resend_at, &ctv);
+        if ((tout->tv_sec == 0 && tout->tv_usec == 0) ||
+            timeval_comp(&remaining, tout) < 0) {
+            *tout = remaining;
+        }
+        return 0;
+    }
 
     if ((f->timeout.tv_sec == 0) && (f->timeout.tv_usec == 0)) {
         return 0;
@@ -1121,14 +1138,72 @@ static pcp_server_state_e handle_send_all_msgs(pcp_server_t *s) {
     return pss_wait_io_calc_nearest_timeout;
 }
 
-static pcp_server_state_e handle_server_restart(pcp_server_t *s) {
+// Not for security: different clients of one server must not pick the same
+// delay, and rand() is not seeded, so mix in what differs between processes.
+static uint32_t random_below(const pcp_ctx_t *ctx, uint32_t bound) {
+    struct timeval now;
+    int local;
+    uint64_t x;
+
+    gettimeofday(&now, NULL);
+    x = (uint64_t)now.tv_sec * 1000003u + (uint64_t)now.tv_usec;
+    x ^= (uint64_t)(uintptr_t)ctx << 17;
+    x ^= (uint64_t)(uintptr_t)&local << 5;
+    x ^= (uint64_t)rand() << 32;
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= 0xc4ceb9fe1a85ec53ULL;
+    x ^= x >> 33;
+    return (uint32_t)(x % bound);
+}
+
+static void resend_after_restart(pcp_server_t *s) {
     struct flow_iterator_data d = {s, fev_server_restarted};
 
+    s->restart_pending = 0;
     pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);
     s->restart_flow_msg = NULL;
-    gettimeofday(&s->next_timeout, NULL);
+}
 
-    return pss_wait_io_calc_nearest_timeout;
+/*
+ * The server restarted. RFC 6887, 14.2.1: wait a random time between 0 and 5
+ * seconds, so that the clients of one server do not all re-send at once, then
+ * re-send every mapping made at that server. The wait ends in
+ * handle_wait_io_timeout(). The flow whose reply showed the restart is not
+ * sent again (see fhndl_send()), so keep restart_flow_msg until then.
+ */
+static pcp_server_state_e handle_server_restart(pcp_server_t *s) {
+    uint32_t max_ms = MIN(s->ctx->restart_delay_max_ms, 5000u);
+    struct timeval now;
+
+    gettimeofday(&now, NULL);
+    if (s->restart_pending) {
+        // already waiting; a second sign of the same restart changes nothing
+        s->next_timeout = s->restart_resend_at;
+        return pss_wait_io;
+    }
+
+    if (max_ms == 0) {
+        resend_after_restart(s);
+        s->next_timeout = now;
+        return pss_wait_io_calc_nearest_timeout;
+    }
+
+    {
+        uint32_t delay_ms = random_below(s->ctx, max_ms + 1);
+
+        s->restart_resend_at = now;
+        s->restart_resend_at.tv_sec += delay_ms / 1000;
+        s->restart_resend_at.tv_usec += (delay_ms % 1000) * 1000;
+        timeval_align(&s->restart_resend_at);
+        s->restart_pending = 1;
+        PCP_LOG(PCP_LOGLVL_INFO,
+                "PCP server %s restarted, re-sending mappings in %u ms",
+                s->pcp_server_paddr, (unsigned)delay_ms);
+    }
+    s->next_timeout = s->restart_resend_at;
+    return pss_wait_io;
 }
 
 static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s) {
@@ -1179,6 +1254,11 @@ static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s) {
 static pcp_server_state_e handle_wait_io_timeout(pcp_server_t *s) {
     struct timeval ctv;
 
+    gettimeofday(&ctv, NULL);
+    if (s->restart_pending && timeval_comp(&s->restart_resend_at, &ctv) <= 0) {
+        resend_after_restart(s);
+    }
+
     s->next_timeout.tv_sec = 0;
     s->next_timeout.tv_usec = 0;
 
@@ -1189,6 +1269,13 @@ static pcp_server_state_e handle_wait_io_timeout(pcp_server_t *s) {
         s->next_timeout.tv_sec += ctv.tv_sec;
         s->next_timeout.tv_usec += ctv.tv_usec;
         timeval_align(&s->next_timeout);
+    }
+
+    // the wait before re-sending after a restart is also a wake-up time
+    if (s->restart_pending &&
+        ((s->next_timeout.tv_sec == 0 && s->next_timeout.tv_usec == 0) ||
+         timeval_comp(&s->restart_resend_at, &s->next_timeout) < 0)) {
+        s->next_timeout = s->restart_resend_at;
     }
 
     return pss_wait_io;

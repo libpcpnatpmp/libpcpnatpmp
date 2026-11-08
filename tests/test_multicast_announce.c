@@ -4,8 +4,9 @@
  *
  * A restarted PCP server announces itself with an unsolicited ANNOUNCE
  * response to 224.0.0.1:5350 (RFC 6887, 14.2.1). The client must see it:
- * when the epoch shows a restart it re-sends its mappings, when the epoch is
- * where the client expects it it does nothing.
+ * when the epoch shows a restart it waits a random time of up to 5 seconds
+ * and then re-sends its mappings; when the epoch is where the client expects
+ * it it does nothing.
  *
  * The fake server is a plain UDP socket bound to the address of a
  * multicast-capable interface, since loopback does not do multicast. The test
@@ -24,6 +25,7 @@
 #include <net/if.h>
 #include <netinet/in.h>
 #include <poll.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -167,15 +169,18 @@ static ssize_t wrapped_sendto(PCP_SOCKET sockfd, const void *buf, size_t len,
                                          dest_addr, addrlen);
 }
 
-/* One client with one mapping, using the socket table `socket_vt` (NULL for
- * the library's). The server answers with epoch FIRST_EPOCH, then announces
- * itself with `announce_epoch` to the multicast group. Returns whether the
- * client sent its request again within 2 seconds. */
 static int last_client_port;
 
-static int announce_makes_client_resend(const char *address,
-                                        uint32_t announce_epoch,
-                                        pcp_socket_vt_t *socket_vt) {
+/* One client with one mapping, using the socket table `socket_vt` (NULL for
+ * the library's). The server answers with epoch FIRST_EPOCH, then announces
+ * itself with `announce_epoch` to the multicast group. Returns how long the
+ * client took to send its request again, in seconds, or -1 if it did not
+ * within `wait_s`. restart_max_ms is the longest random wait before
+ * re-sending; UINT32_MAX leaves the library's default. */
+static double announce_resend_delay(const char *address,
+                                    uint32_t announce_epoch,
+                                    uint32_t restart_max_ms, double wait_s,
+                                    pcp_socket_vt_t *socket_vt) {
     char server_str[64];
     char client_str[64];
     unsigned char buf[PCP_MAX_LEN];
@@ -184,7 +189,8 @@ static int announce_makes_client_resend(const char *address,
     pcp_ctx_t *ctx;
     pcp_flow_t *flow;
     int fd = serve_socket(address);
-    int n, resent;
+    int n;
+    double announced, delay = -1;
 
     snprintf(server_str, sizeof(server_str), "%s:%d", address, SERVER_PORT);
     snprintf(client_str, sizeof(client_str), "%s:2000", address);
@@ -193,6 +199,9 @@ static int announce_makes_client_resend(const char *address,
     TEST(ctx != NULL);
     last_client_port = client_port(ctx);
     listen_warnings = 0;
+    if (restart_max_ms != UINT32_MAX) {
+        pcp_set_restart_delay(ctx, restart_max_ms);
+    }
     TEST(pcp_add_server(ctx, Sock_pton(server_str), 2) == 0);
     if (listen_warnings != 0) {
         /* another program holds 5350 and does not share it */
@@ -222,13 +231,45 @@ static int announce_makes_client_resend(const char *address,
     TEST(pcp_wait(flow, 2000, 0) == pcp_state_succeeded);
     (void)wait_for_request(ctx, fd, 1.0, buf, sizeof(buf), &peer);
 
+    if (restart_max_ms == 0) {
+        pcp_server_t *server = get_pcp_server(ctx, flow->pcp_server_indx);
+        struct timeval original_timeout = flow->timeout;
+        struct timeval original_server_timeout = server->next_timeout;
+        time_t expiry = flow->recv_lifetime;
+        pcp_flow_state_e states[] = {pfs_wait_for_lifetime_renew,
+                                     pfs_wait_resp};
+        size_t i;
+
+        // Another server's timeout also scans this context's flows.
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5363"), 2) == 1);
+        for (i = 0; i < sizeof(states) / sizeof(*states); ++i) {
+            flow->state = states[i];
+            flow->timeout.tv_sec = 1;
+            flow->timeout.tv_usec = 0;
+            server->restart_pending = 1;
+            gettimeofday(&server->restart_resend_at, NULL);
+            server->restart_resend_at.tv_sec += 2;
+            server->next_timeout = server->restart_resend_at;
+            TEST(wait_for_request(ctx, fd, 0.1, buf, sizeof(buf), &peer) == 0);
+            TEST(flow->state == states[i]);
+            TEST(flow->recv_lifetime == expiry);
+            server->restart_pending = 0;
+        }
+        flow->state = pfs_wait_for_lifetime_renew;
+        flow->timeout = original_timeout;
+        server->next_timeout = original_server_timeout;
+    }
+
+    announced = now_s();
     send_multicast_announce(fd, announce_epoch);
-    resent = wait_for_request(ctx, fd, 2.0, buf, sizeof(buf), &peer) == 60;
+    if (wait_for_request(ctx, fd, wait_s, buf, sizeof(buf), &peer) == 60) {
+        delay = now_s() - announced;
+    }
 
     pcp_delete_flow(flow);
     pcp_terminate(ctx, 0);
     close(fd);
-    return resent;
+    return delay;
 }
 
 /* Adding a server again (the library keys servers by address, so a new port
@@ -267,7 +308,7 @@ static void second_client_on_host(const char *address) {
     }
 
     /* a server restart seen by a client on the other port */
-    TEST(announce_makes_client_resend(address, 0, NULL));
+    TEST(announce_resend_delay(address, 0, 0, 2.0, NULL) >= 0);
     TEST(last_client_port != ANNOUNCE_PORT);
     {
         pcp_ctx_t *second = pcp_init(DISABLE_AUTODISCOVERY, NULL);
@@ -310,9 +351,13 @@ static void second_client_on_host(const char *address) {
     pcp_terminate(first, 0);
 }
 
+#define RANDOM_TRIALS 8
+
 int main(void) {
     char address[64];
     pcp_socket_vt_t wrapped_socket = default_socket_vt;
+    double delay, shortest = 1e9, longest = -1;
+    int i;
 
 #ifndef __linux__
     /* missing elsewhere: see pcp_socket_join_announce_groups() */
@@ -327,13 +372,37 @@ int main(void) {
     }
     printf("using %s\n", address);
 
-    /* the server restarted: its epoch is back near zero */
-    TEST(announce_makes_client_resend(address, 0, NULL));
-    /* the server has been up as long as the client expects: no restart */
-    TEST(!announce_makes_client_resend(address, FIRST_EPOCH + 1, NULL));
+    /* the server restarted: its epoch is back near zero. With the wait
+     * turned off the client re-sends at once. */
+    delay = announce_resend_delay(address, 0, 0, 2.0, NULL);
+    TEST(delay >= 0 && delay < 0.2);
+
+    /* the server has been up as long as the client expects: no restart, so
+     * nothing is sent even after the longest wait */
+    TEST(announce_resend_delay(address, FIRST_EPOCH + 1, 1000, 2.0, NULL) < 0);
+
+    /* RFC 6887, 14.2.1: the client waits a random time of up to max_ms before
+     * it re-sends, and different clients pick different times. */
+    for (i = 0; i < RANDOM_TRIALS; i++) {
+        delay = announce_resend_delay(address, 0, 1000, 2.0, NULL);
+        TEST(delay >= 0 && delay <= 1.2);
+        if (delay < shortest) {
+            shortest = delay;
+        }
+        if (delay > longest) {
+            longest = delay;
+        }
+    }
+    printf("random wait over %d trials: %.3f s to %.3f s\n", RANDOM_TRIALS,
+           shortest, longest);
+
+    /* the default is the longest the RFC allows: 5 seconds */
+    delay = announce_resend_delay(address, 0, UINT32_MAX, 6.5, NULL);
+    TEST(delay >= 0 && delay <= 5.2);
+
     /* an application that wraps sendto still has the library's socket */
     wrapped_socket.sock_sendto = wrapped_sendto;
-    TEST(announce_makes_client_resend(address, 0, &wrapped_socket));
+    TEST(announce_resend_delay(address, 0, 0, 2.0, &wrapped_socket) >= 0);
 
     server_added_twice(address);
     second_client_on_host(address);

@@ -208,6 +208,14 @@ int main(void) {
         pcp_terminate(ctx, 1);
     }
 
+    ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+    TEST(ctx != NULL);
+    pcp_set_restart_delay(ctx, UINT32_MAX);
+    TEST(ctx->restart_delay_max_ms == 5000);
+    pcp_set_restart_delay(ctx, 0);
+    TEST(ctx->restart_delay_max_ms == 0);
+    pcp_terminate(ctx, 1);
+
     printf("Tests succeeded.\n\n");
 
     PD_SOCKET_CLEANUP();

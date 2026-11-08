@@ -313,6 +313,16 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout);
  */
 PCP_SOCKET pcp_get_socket(pcp_ctx_t *ctx);
 
+/*
+ * After the library notices that a server restarted (an ANNOUNCE or any
+ * reply whose epoch is outside the expected range), it waits a random time
+ * before it re-sends the client's mappings, so that the clients of one
+ * server do not all do it at once (RFC 6887, 14.2.1). The time is chosen
+ * uniformly between 0 and max_ms; the default is 5000, the longest the RFC
+ * allows. Larger values are limited to 5000 ms. 0 turns the wait off.
+ */
+void pcp_set_restart_delay(pcp_ctx_t *ctx, uint32_t max_ms);
+
 // example of pcp_pulse and pcp_get_socket use in select loop:
 /*
  pcp_ctx_t *ctx=pcp_init(1, NULL);
