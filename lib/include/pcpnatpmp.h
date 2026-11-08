@@ -286,7 +286,8 @@ int pcp_flow_set_filter_mode(pcp_flow_t *f, pcp_filter_mode_e mode);
  * requests, one after the other. A renewal carries no FILTER option. All the
  * filters are sent again when the server restarts or the mapping is lost (the
  * renewal or the flow failed, or it expired while the client waited after an
- * error).
+ * error). A request that deletes the mapping (lifetime 0) and a PEER request
+ * carry no FILTER option (RFC 6887 sections 13.3, 7.3).
  */
 int pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                             uint8_t filter_prefix);

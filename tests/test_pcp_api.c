@@ -416,7 +416,14 @@ int main(void) {
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == 60 - n1);
         TEST(pcp_flow_filters_confirmed(f3));
         TEST(f3->filter_reset == 0);
+        // a request that deletes the mapping carries none (RFC 6887 section
+        // 13.3: the server answers MALFORMED_OPTION)
         pcp_flow_filters_resend(f3);
+        f3->lifetime = 0;
+        TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == 0);
+        TEST(!pcp_flow_filters_pending(f3));
+        f3->lifetime = 100;
+        TEST(pcp_flow_filters_pending(f3));
 #ifdef PCP_EXPERIMENTAL
         // a long user ID leaves room for fewer FILTER options, written last
         {

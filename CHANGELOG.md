@@ -23,6 +23,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 
 - A flow sent one FILTER option per request, so a client that allowed several remote hosts had to set a filter, wait for its request to go out, and only then set the next; a filter set before that silently replaced the previous one, and the request re-sent after a server restart carried only the last filter. All the filters a flow has outstanding now go out together, as many as fit in one request and the rest in the next ones, and every one of them is sent again after a restart.
 - A server adds the filters of each request to the ones it has, so replacing a flow's filter left the old one allowed. When a filter is removed (replaced, cleared or dropped by a mode switch), the next requests now start with a FILTER option with prefix length 0, which removes the server's filters, until the server accepts one.
+- Deleting a mapping that has FILTER options sent them with the delete, which a server refuses with `MALFORMED_OPTION` (RFC 6887 section 13.3), so the mapping was never deleted. A delete now carries no FILTER option, and neither does a PEER request.
 - A flow from a global IPv6 address through a link-local server (the usual
   default router) got no matching replies, since its key kept the source's
   scope while each reply's key has none. Only a link-local source now keeps a

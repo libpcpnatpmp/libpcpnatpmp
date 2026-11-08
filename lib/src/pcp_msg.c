@@ -75,7 +75,9 @@ static void *add_filter_option(pcp_flow_t *f, void *cur,
  * fhndl_received_success()). It is the last option written, so the space
  * check covers the options before it. A pending reset goes first: a FILTER
  * with prefix length 0 removes the filters the server has (RFC 6887 section
- * 13.3), the ones after it are added. */
+ * 13.3), the ones after it are added. Only a MAP request that creates or
+ * renews a mapping carries FILTER: with lifetime 0 the server answers
+ * MALFORMED_OPTION, and PEER does not take it. */
 static void *add_filter_options(pcp_flow_t *f, void *cur) {
     uint16_t i, written = 0, pending = 0;
     int full = 0;
@@ -89,6 +91,10 @@ static void *add_filter_options(pcp_flow_t *f, void *cur) {
             f->filters[i].state = PCP_FILTER_PENDING;
         }
     }
+    if (f->kd.operation != PCP_OPCODE_MAP || f->lifetime == 0) {
+        return cur;
+    }
+
     if (f->filter_reset) {
         struct pcp_flow_filter none;
 

@@ -33,6 +33,7 @@
 
 #include "pcp_client_db.h"
 #include "pcp_logger.h"
+#include "pcp_msg_structs.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
 #include <assert.h>
@@ -157,7 +158,8 @@ int pcp_flow_filters_pending(const pcp_flow_t *f) {
     uint16_t i;
 
     /* NAT-PMP has no FILTER option */
-    if (s != NULL && s->pcp_version == 0) {
+    if (f->kd.operation != PCP_OPCODE_MAP || f->lifetime == 0 ||
+        (s != NULL && s->pcp_version == 0)) {
         return 0;
     }
     if (f->filter_reset) {
