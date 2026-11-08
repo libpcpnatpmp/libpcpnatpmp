@@ -7,8 +7,16 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 ## [Unreleased]
 
 ### Added
+
 - `pcp_flow_info_t.pcp_version`: the protocol version spoken with the flow's
   server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
+
+### Fixed
+
+- A flow from a global IPv6 address through a link-local server (the usual
+  default router) got no matching replies, since its key kept the source's
+  scope while each reply's key has none. Only a link-local source now keeps a
+  scope, and it must still be the server's.
 
 ## [1.0.0] - 2026-05-14
 
