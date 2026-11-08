@@ -214,9 +214,19 @@ int pcp_flow_set_location(pcp_flow_t *f, pcp_location_option_p loc);
 #endif
 
 /*
- * Append filter option. filter_prefix is the prefix length of filter_ip: for
- * an IPv4 address 0 to 32 (sent as 96 to 128, RFC 6887 section 13.3), for an
- * IPv6 address 0 to 128.
+ * Append filter option. A mapping without a filter lets every peer in; each
+ * filter restricts it to the peers it names, and filters add up.
+ * filter_prefix is the prefix length of filter_ip.
+ * 0 removes all filters of the mapping: it is sent as address ::, port 0,
+ * prefix 0 for any filter_ip, as RFC 6887 section 13.3 allows prefix 0 only
+ * for an IPv6 address. So no filter can permit every IPv6 peer; 2000::/3
+ * covers every global-unicast IPv6 peer without matching IPv4 ones.
+ * For an IPv4 address (AF_INET, or AF_INET6 IPv4-mapped ::ffff:a.b.c.d) it is
+ * 1 to 32, and is sent as 97 to 128; a value already in 96 to 128 is taken as
+ * adjusted and sent unchanged, so 96 permits every IPv4 peer.
+ * For any other IPv6 address it is 1 to 128.
+ * An invalid prefix length, a NULL filter_ip or an address family other than
+ * AF_INET/AF_INET6 is logged and the call leaves the flow unchanged.
  */
 void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                              uint8_t filter_prefix);

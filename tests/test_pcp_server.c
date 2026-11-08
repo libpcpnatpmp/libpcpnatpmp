@@ -449,6 +449,24 @@ static void setup_filter(pcp_flow_t *flow) {
     pcp_flow_set_filter_opt(flow, filter_ip, 12);
 }
 
+static void setup_filter_v4mapped(pcp_flow_t *flow) {
+    struct sockaddr *filter_ip = Sock_pton("[::ffff:8.8.4.4]:5555");
+
+    pcp_flow_set_filter_opt(flow, filter_ip, 32);
+}
+
+static void setup_filter_remove_v4(pcp_flow_t *flow) {
+    struct sockaddr *filter_ip = Sock_pton("8.8.8.8:4444");
+
+    pcp_flow_set_filter_opt(flow, filter_ip, 0);
+}
+
+static void setup_filter_v6(pcp_flow_t *flow) {
+    struct sockaddr *filter_ip = Sock_pton("[2001:db8::1]:6666");
+
+    pcp_flow_set_filter_opt(flow, filter_ip, 64);
+}
+
 static void test_log_file_cases(void) {
     struct sockaddr_storage source;
     struct sockaddr_storage destination;
@@ -489,6 +507,17 @@ static void test_log_file_cases(void) {
                                          "FILTER IP: ",
                                          "8.8.8.8",
                                          NULL};
+    static const char *const filter_v4mapped[] = {
+        "OPTION: \t Filter", "PREFIX: 128", "FILTER PORT: 5555", "8.8.4.4",
+        NULL};
+    /* removal given an IPv4 peer: prefix 0 is valid only with an IPv6
+     * address, so it must arrive as ::/0, not as 96 or with ::ffff:8.8.8.8 */
+    static const char *const filter_remove_v4[] = {
+        "OPTION: \t Filter", "PREFIX: 0 ", "FILTER PORT: 0 ",
+        "FILTER IP: :: ", NULL};
+    static const char *const filter_v6[] = {"OPTION: \t Filter", "PREFIX: 64",
+                                            "FILTER PORT: 6666",
+                                            "FILTER IP: 2001:db8::1", NULL};
 
     sock_pton("127.0.0.1:1234", (struct sockaddr *)&source);
     sock_pton("127.0.0.1:8888", (struct sockaddr *)&destination);
@@ -509,6 +538,15 @@ static void test_log_file_cases(void) {
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, setup_filter,
                          filter);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL,
+                         setup_filter_v4mapped, filter_v4mapped);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL,
+                         setup_filter_remove_v4, filter_remove_v4);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, setup_filter_v6,
+                         filter_v6);
 }
 
 static void send_malformed_packet(const char *server_port) {

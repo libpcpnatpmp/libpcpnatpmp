@@ -150,6 +150,78 @@ int main(void) {
         TEST(memcmp(map->nonce.n, nonce_words_be, sizeof(map->nonce.n)) == 0);
     }
 
+    // FILTER prefix length on the wire (RFC 6887 section 13.3)
+    {
+        struct sockaddr_storage unspec;
+
+        // IPv4 1..32 is sent plus 96, on every child flow
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 12);
+        TEST(f1->filter_option_present == 1);
+        TEST(f1->filter_prefix == 108);
+        TEST(f1->filter_port == htons(4444));
+        TEST(IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
+        TEST(f1->next_child->filter_option_present == 1);
+        TEST(f1->next_child->filter_prefix == 108);
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 1);
+        TEST(f1->filter_prefix == 97);
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 32);
+        TEST(f1->filter_prefix == 128);
+        // IPv4 96..128 is taken as already adjusted; 96 is any IPv4 peer
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 100);
+        TEST(f1->filter_prefix == 100);
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 96);
+        TEST(f1->filter_prefix == 96);
+        TEST(IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
+        // 0 removes all filters: ::/0, port 0, whatever peer is given
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 0);
+        TEST(f1->filter_prefix == 0);
+        TEST(f1->filter_port == 0);
+        TEST(IN6_IS_ADDR_UNSPECIFIED(&f1->filter_ip));
+        TEST(f1->next_child->filter_prefix == 0);
+        TEST(IN6_IS_ADDR_UNSPECIFIED(&f1->next_child->filter_ip));
+        // IPv4 given as IPv4-mapped IPv6 is adjusted the same way
+        pcp_flow_set_filter_opt(f1, Sock_pton("[::ffff:8.8.8.8]:4444"), 12);
+        TEST(f1->filter_prefix == 108);
+        pcp_flow_set_filter_opt(f1, Sock_pton("[::ffff:8.8.8.8]:4444"), 32);
+        TEST(f1->filter_prefix == 128);
+        // IPv6 is sent unchanged
+        pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"), 64);
+        TEST(f1->filter_prefix == 64);
+        TEST(!IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
+        pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"), 0);
+        TEST(f1->filter_prefix == 0);
+        TEST(f1->filter_port == 0);
+        TEST(IN6_IS_ADDR_UNSPECIFIED(&f1->filter_ip));
+        pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"), 128);
+        TEST(f1->filter_prefix == 128);
+
+        // invalid input leaves the flow unchanged
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 33);
+        TEST(f1->filter_prefix == 128);
+        TEST(!IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 95);
+        TEST(f1->filter_prefix == 128);
+        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 129);
+        TEST(f1->filter_prefix == 128);
+        pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"), 200);
+        TEST(f1->filter_prefix == 128);
+        pcp_flow_set_filter_opt(f1, NULL, 12);
+        TEST(f1->filter_prefix == 128);
+        pcp_flow_set_filter_opt(NULL, Sock_pton("8.8.8.8:4444"), 12);
+        memset(&unspec, 0, sizeof(unspec));
+        unspec.ss_family = AF_UNSPEC;
+        pcp_flow_set_filter_opt(f1, (struct sockaddr *)&unspec, 12);
+        TEST(f1->filter_prefix == 128);
+        TEST(!IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
+
+        // an invalid call on a flow without the option does not add it
+        TEST(f1->next_child->next_child == NULL);
+        TEST((f2 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1235"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        pcp_flow_set_filter_opt(f2, Sock_pton("8.8.8.8:4444"), 64);
+        TEST(f2->filter_option_present == 0);
+    }
+
     pcp_terminate(ctx, 1);
 
     // regression test: pcp_terminate(close_flows=1) closes and removes flows

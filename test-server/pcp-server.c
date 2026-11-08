@@ -338,6 +338,15 @@ static int print_PCP_options(void *pcp_buf, int *remainingSize,
         DUPPRINT(log_file, "\n");
         DUPPRINT(log_file, "OPTION: \t Filter \n");
         DUPPRINT(log_file, "\t PREFIX: %d \n", opt_filter->filter_prefix);
+        /* RFC 6887 section 13.3: the prefix length covers the 128-bit
+         * address, so an IPv4-mapped peer needs 96 to 128. */
+        if ((opt_filter->filter_prefix > 128) ||
+            (IN6_IS_ADDR_V4MAPPED(
+                 (struct in6_addr *)&opt_filter->filter_peer_ip) &&
+             (opt_filter->filter_prefix < 96))) {
+            DUPPRINT(log_file, "Invalid FILTER prefix length.\n");
+            pcp_result_code = PCP_RES_MALFORMED_OPTION;
+        }
         DUPPRINT(log_file, "\t FILTER PORT: %d \n",
                  htons(opt_filter->filter_peer_port));
         DUPPRINT(log_file, "\t FILTER IP: %s \n",
