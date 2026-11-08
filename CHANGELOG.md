@@ -20,6 +20,10 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 - Replies to a flow whose nonce was set with `pcp_flow_set_nonce()` never
   matched it: the flow stayed filed under its old nonce. It is now filed again
   under the new one.
+- The test server, listening on all addresses, answered IPv6 requests from
+  whatever address routing picked rather than the one asked, so a client that
+  asked its link-local address dropped every answer. It now answers from the
+  address each request was sent to.
 
 ## [1.0.0] - 2026-05-14
 
