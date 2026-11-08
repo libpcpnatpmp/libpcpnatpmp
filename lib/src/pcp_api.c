@@ -518,8 +518,8 @@ int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]) {
         pcp_server_t *s = get_pcp_server(iter->ctx, iter->pcp_server_indx);
         int was_filed;
 
-        // NAT-PMP has no nonce: its answers are looked up under the server's
-        if (s && s->pcp_version == 0) {
+        // PCP v1 and NAT-PMP replies have no nonce and use the server's.
+        if (s && s->pcp_version < 2) {
             continue;
         }
 

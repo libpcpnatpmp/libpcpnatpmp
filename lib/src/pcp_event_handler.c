@@ -887,7 +887,7 @@ static pcp_server_state_e handle_wait_ping_resp_recv(pcp_server_t *s) {
 }
 
 // gives a flow of the server in `data` the server's nonce, under which
-// NAT-PMP answers, which carry none, are looked up
+// PCP v1 and NAT-PMP answers, which carry none, are looked up
 static int use_server_nonce_iter(pcp_flow_t *f, void *data) {
     pcp_server_t *s = (pcp_server_t *)data;
 
@@ -931,9 +931,12 @@ static pcp_server_state_e handle_version_negotiation(pcp_server_t *s) {
 
     ping_msg = s->ping_flow_msg;
 
+    if (s->pcp_version < 2) {
+        pcp_db_foreach_flow(s->ctx, use_server_nonce_iter, s);
+    }
+
 #ifndef PCP_DISABLE_NATPMP
     if (s->pcp_version == 0) {
-        pcp_db_foreach_flow(s->ctx, use_server_nonce_iter, s);
         if (ping_msg) {
             ping_msg->state = pfs_wait_for_server_init;
             ping_msg->timeout.tv_sec = 0;
