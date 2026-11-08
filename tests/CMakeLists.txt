@@ -179,4 +179,7 @@ if (NOT WIN32)
     add_test (NAME test_scale COMMAND test_scale 10000)
     # the server taking 1 ms per request
     add_test (NAME test_scale_slow_server COMMAND test_scale 10000 0 1000)
+    set_tests_properties (test_scale test_scale_slow_server PROPERTIES
+        RESOURCE_LOCK pcp_scale_server
+    )
 endif ()
