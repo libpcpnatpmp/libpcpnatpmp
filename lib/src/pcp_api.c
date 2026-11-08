@@ -713,6 +713,11 @@ pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count) {
 
     for (fiter = f, info_iter = info_buf; fiter != NULL;
          fiter = fiter->next_child, ++info_iter) {
+        pcp_server_t *s = get_pcp_server(fiter->ctx, fiter->pcp_server_indx);
+
+        if (s) {
+            info_iter->pcp_version = s->pcp_version;
+        }
 
         switch (fiter->state) {
         case pfs_wait_after_short_life_error:
