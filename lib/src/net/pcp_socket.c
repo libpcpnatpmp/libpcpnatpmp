@@ -368,7 +368,7 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
 }
 
 #ifndef PCP_SOCKET_IS_VOIDPTR
-#if defined(PCP_USE_IPV6_SOCKET) && !defined(WIN32)
+#if !defined(WIN32)
 // Index of the interface that has the address `ip`, or 0.
 static unsigned interface_index_of(const struct in6_addr *ip) {
     struct ifaddrs *list, *a;
@@ -542,6 +542,7 @@ static PCP_SOCKET announce_listener(const struct in6_addr *src_ip,
              setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&mreq,
                         sizeof(mreq)) == 0;
     } else if (ok) {
+#ifdef PCP_USE_IPV6_SOCKET
         struct sockaddr_in6 sin6;
         struct ipv6_mreq mreq6;
 
@@ -561,6 +562,9 @@ static PCP_SOCKET announce_listener(const struct in6_addr *src_ip,
              bind(s, (struct sockaddr *)&sin6, sizeof(sin6)) == 0 &&
              setsockopt(s, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char *)&mreq6,
                         sizeof(mreq6)) == 0;
+#else
+        ok = 0;
+#endif
     }
     if (!ok) {
         CLOSE(s);

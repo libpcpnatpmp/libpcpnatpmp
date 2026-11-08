@@ -64,8 +64,7 @@ int pcp_win_sock_cleanup();
 #endif
 #endif
 
-#if !defined(PCP_SOCKET_IS_VOIDPTR) && !defined(WIN32) &&                      \
-    defined(PCP_USE_IPV6_SOCKET)
+#if !defined(PCP_SOCKET_IS_VOIDPTR) && !defined(WIN32)
 // A client that did not get port 5350 listens there on a socket of its own
 #define PCP_ANNOUNCE_LISTENER
 #endif
