@@ -34,6 +34,13 @@ int main(void) {
     struct sockaddr_storage sa;
     int prefix;
 
+#ifndef WIN32
+    /* Turn off the resolver's search domains. With a search domain that
+     * answers any name, "10.10.250d.22.11" would resolve as
+     * "10.10.250d.22.11.<domain>" and the checks that expect -2 would fail. */
+    TEST(setenv("LOCALDOMAIN", "", 1) == 0);
+#endif
+
     PD_SOCKET_STARTUP();
     TEST(0 == sock_pton("[::1]:1234", (struct sockaddr *)&sa));
     TEST(strcmp(Sock_ntop((struct sockaddr *)&sa,
