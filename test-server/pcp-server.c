@@ -167,8 +167,13 @@ static PCP_SOCKET createPCPsocket(const char *serverPort,
 #if !defined(WIN32) && defined(IPV6_RECVPKTINFO)
     // learn the address each request was sent to, to answer from it
     if (p->ai_family == AF_INET6) {
-        setsockopt(sockfd, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&yes,
-                   sizeof(yes));
+        if (setsockopt(sockfd, IPPROTO_IPV6, IPV6_RECVPKTINFO, (char *)&yes,
+                       sizeof(yes)) == PCP_SOCKET_ERROR) {
+            perror("PCP server: IPV6_RECVPKTINFO");
+            CLOSE(sockfd);
+            freeaddrinfo(servinfo);
+            return PCP_INVALID_SOCKET;
+        }
     }
 #endif
 
@@ -638,6 +643,12 @@ int pcp_test_server_start(pcp_test_server_t *server, const char *serverPort,
 #endif // WIN32
 
     server->sockfd = createPCPsocket(serverPort, serverAddress);
+    if (server->sockfd == PCP_INVALID_SOCKET) {
+#ifdef WIN32
+        pcp_win_sock_cleanup();
+#endif
+        return 1;
+    }
     gettimeofday(&tod, NULL);
     server->timeout_time.tv_sec = tod.tv_sec + server_info->tv.tv_sec;
     server->timeout_time.tv_usec = tod.tv_usec + server_info->tv.tv_usec;
@@ -710,9 +721,9 @@ static int recv_request(PCP_SOCKET sock, char *buf, size_t len,
 // Answers from the address the request was sent to. A client knows its
 // server by that address, and drops a reply from any other: one that asked a
 // link-local address would never hear from a server bound to "::".
-static void send_reply(PCP_SOCKET sock, const char *buf, size_t len,
-                       struct sockaddr_storage *to, socklen_t to_len,
-                       const struct in6_pktinfo *src, int has_src) {
+static int send_reply(PCP_SOCKET sock, const char *buf, size_t len,
+                      struct sockaddr_storage *to, socklen_t to_len,
+                      const struct in6_pktinfo *src, int has_src) {
     struct iovec iov;
     struct msghdr msg;
     char control[CMSG_SPACE(sizeof(struct in6_pktinfo))];
@@ -739,7 +750,7 @@ static void send_reply(PCP_SOCKET sock, const char *buf, size_t len,
         memcpy(CMSG_DATA(cmsg), src, sizeof(*src));
     }
 
-    sendmsg(sock, &msg, 0);
+    return (int)sendmsg(sock, &msg, 0);
 }
 #endif
 
@@ -846,11 +857,18 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
                         &server->server_info);
 
 #ifdef PCP_SERVER_ANSWERS_FROM_DST
-        send_reply(server->sockfd, buf, (size_t)numbytes, &their_addr, addr_len,
-                   &dst, has_dst);
+        if (send_reply(server->sockfd, buf, (size_t)numbytes, &their_addr,
+                       addr_len, &dst, has_dst) == PCP_SOCKET_ERROR) {
+            perror("PCP server: sendmsg");
+            return -1;
+        }
 #else
-        sendto(server->sockfd, buf, numbytes, 0, (struct sockaddr *)&their_addr,
-               addr_len);
+        if (sendto(server->sockfd, buf, numbytes, 0,
+                   (struct sockaddr *)&their_addr,
+                   addr_len) == PCP_SOCKET_ERROR) {
+            perror("PCP server: sendto");
+            return -1;
+        }
 #endif
 
         reset_option_occur(&opt_occurence);

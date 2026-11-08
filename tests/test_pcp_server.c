@@ -55,6 +55,110 @@ typedef test_process_result_t server_run_result_t;
 #define TEST_PCP_SERVER_LOG_PORT "55491"
 #define TEST_PCP_SERVER_MALFORMED_PORT "55492"
 
+#ifndef WIN32
+static void check_reply_source(pcp_test_server_t *server, int family) {
+    int client;
+    struct sockaddr_storage destination;
+    struct sockaddr_storage source;
+    socklen_t source_len = sizeof(source);
+    struct sockaddr_in6 bound_address;
+    socklen_t bound_len = sizeof(bound_address);
+    struct timeval timeout = {1, 0};
+    unsigned char request[24] = {2, 0};
+    unsigned char reply[24];
+    socklen_t destination_len;
+
+    TEST(getsockname(server->sockfd, (struct sockaddr *)&bound_address,
+                     &bound_len) == 0);
+    memset(&destination, 0, sizeof(destination));
+    if (family == AF_INET6) {
+        struct sockaddr_in6 *address = (struct sockaddr_in6 *)&destination;
+        address->sin6_family = AF_INET6;
+        address->sin6_port = bound_address.sin6_port;
+        address->sin6_addr = in6addr_loopback;
+        destination_len = sizeof(*address);
+    } else {
+        struct sockaddr_in *address = (struct sockaddr_in *)&destination;
+        address->sin_family = AF_INET;
+        address->sin_port = bound_address.sin6_port;
+        address->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        destination_len = sizeof(*address);
+    }
+
+    client = socket(family, SOCK_DGRAM, 0);
+    TEST(client >= 0);
+    TEST(setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                    sizeof(timeout)) == 0);
+    TEST(sendto(client, request, sizeof(request), 0,
+                (struct sockaddr *)&destination,
+                destination_len) == (int)sizeof(request));
+    TEST(pcp_test_server_pulse(server, 1000) == 1);
+    TEST(recvfrom(client, reply, sizeof(reply), 0, (struct sockaddr *)&source,
+                  &source_len) == (int)sizeof(reply));
+    TEST(reply[0] == 2);
+    TEST(reply[1] == 0x80);
+    TEST(source.ss_family == family);
+    if (family == AF_INET6) {
+        struct sockaddr_in6 *address = (struct sockaddr_in6 *)&source;
+        TEST(IN6_IS_ADDR_LOOPBACK(&address->sin6_addr));
+        TEST(address->sin6_port == bound_address.sin6_port);
+    } else {
+        struct sockaddr_in *address = (struct sockaddr_in *)&source;
+        TEST(address->sin_addr.s_addr == htonl(INADDR_LOOPBACK));
+        TEST(address->sin_port == bound_address.sin6_port);
+    }
+    close(client);
+}
+
+static void test_wildcard_reply_source(void) {
+    pcp_test_server_t server;
+    server_info_t info;
+    int v6_only;
+    socklen_t option_len = sizeof(v6_only);
+
+    test_pcp_server_info_init(&info);
+    TEST(pcp_test_server_start(&server, "0", "::", &info) == 0);
+    check_reply_source(&server, AF_INET6);
+    TEST(getsockopt(server.sockfd, IPPROTO_IPV6, IPV6_V6ONLY, &v6_only,
+                    &option_len) == 0);
+    if (!v6_only) {
+        check_reply_source(&server, AF_INET);
+    } else {
+        printf("Skipping dual-stack IPv4 check: socket is IPv6-only\n");
+    }
+    pcp_test_server_stop(&server);
+}
+#endif
+
+#ifdef __linux__
+static void test_reply_send_failure(void) {
+    pcp_test_server_t server;
+    server_info_t info;
+    struct sockaddr_in6 address;
+    socklen_t address_len = sizeof(address);
+    int client;
+    unsigned char request[24] = {2, 0};
+
+    test_pcp_server_info_init(&info);
+    info.end_after_recv = 1;
+    TEST(pcp_test_server_start(&server, "0", "::1", &info) == 0);
+    TEST(getsockname(server.sockfd, (struct sockaddr *)&address,
+                     &address_len) == 0);
+    client = socket(AF_INET6, SOCK_DGRAM, 0);
+    TEST(client >= 0);
+    TEST(connect(client, (struct sockaddr *)&address, address_len) == 0);
+    TEST(getsockname(client, (struct sockaddr *)&address, &address_len) == 0);
+    TEST(connect(server.sockfd, (struct sockaddr *)&address, address_len) == 0);
+    TEST(shutdown(server.sockfd, SHUT_WR) == 0);
+    TEST(send(client, request, sizeof(request), 0) == (int)sizeof(request));
+    TEST(pcp_test_server_pulse(&server, 1000) == -1);
+    TEST(server.remaining_messages == 1);
+    TEST(pcp_test_server_is_running(&server));
+    close(client);
+    pcp_test_server_stop(&server);
+}
+#endif
+
 static char *read_stream(FILE *stream) {
     long size;
     char *buffer;
@@ -453,6 +557,12 @@ int main(void) {
     test_cli_ret_dscp();
     test_log_file_cases();
     test_malformed_packet();
+#ifndef WIN32
+    test_wildcard_reply_source();
+#endif
+#ifdef __linux__
+    test_reply_send_failure();
+#endif
 
     PD_SOCKET_CLEANUP();
     return 0;
