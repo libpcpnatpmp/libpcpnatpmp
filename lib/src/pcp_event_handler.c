@@ -1129,10 +1129,22 @@ static pcp_server_state_e handle_version_negotiation(pcp_server_t *s) {
     return pss_wait_ping_resp;
 }
 
+/* The flow whose request was the ping has its reply, and a request it sent
+ * on getting it is on its way: sending it again would only make a second
+ * reply to the same request. */
+static int send_all_iter(pcp_flow_t *f, void *data) {
+    struct flow_iterator_data *d = (struct flow_iterator_data *)data;
+
+    if (f == d->s->ping_flow_msg) {
+        return 0;
+    }
+    return flow_send_event_iter(f, data);
+}
+
 static pcp_server_state_e handle_send_all_msgs(pcp_server_t *s) {
     struct flow_iterator_data d = {s, fev_server_initialized};
 
-    pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);
+    pcp_db_foreach_flow(s->ctx, send_all_iter, &d);
     gettimeofday(&s->next_timeout, NULL);
 
     return pss_wait_io_calc_nearest_timeout;
