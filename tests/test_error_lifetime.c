@@ -37,9 +37,8 @@
 
 // A long lifetime error, such as NOT_AUTHORIZED, fails the flow, and
 // pcp_flow_get_info() reports when the server stops refusing.
-int main(void) {
+static void check_error_lifetime(uint32_t lifetime) {
     struct sockaddr_storage source;
-    uint32_t lifetime = 100; // the test server answers with the lifetime asked
     pcp_flow_t *flow;
     pcp_flow_info_t *info;
     size_t info_count = 0;
@@ -47,9 +46,6 @@ int main(void) {
     time_t before;
     test_pcp_server_sequence_t server_sequence;
     test_pcp_server_config_t server_config;
-
-    PD_SOCKET_STARTUP();
-    pcp_log_level = PCP_LOGLVL_WARN;
 
     test_pcp_server_config_init(&server_config);
     server_config.server_port = "5351";
@@ -83,9 +79,16 @@ int main(void) {
     pcp_delete_flow(flow);
     pcp_terminate(ctx, 0);
     test_pcp_server_sequence_stop(&server_sequence);
+}
 
+int main(void) {
+    PD_SOCKET_STARTUP();
+    pcp_log_level = PCP_LOGLVL_WARN;
+    check_error_lifetime(100);
+    if (sizeof(time_t) > 4) {
+        check_error_lifetime(UINT32_MAX);
+    }
     printf("Tests succeeded.\n\n");
-
     PD_SOCKET_CLEANUP();
 
     return 0;

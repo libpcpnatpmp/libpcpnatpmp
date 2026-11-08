@@ -299,11 +299,15 @@ pcp_flow_state_events_t flow_events_sm[] = {
     {pfs_wait_for_lifetime_renew, fev_res_success, pfs_wait_for_lifetime_renew},
     {pfs_wait_for_lifetime_renew, fev_res_unsupp_version,
      pfs_wait_for_server_init},
-    {pfs_wait_for_lifetime_renew, fev_res_network_failure, pfs_send_renew},
-    {pfs_wait_for_lifetime_renew, fev_res_no_resources, pfs_send_renew},
-    {pfs_wait_for_lifetime_renew, fev_res_exc_remote_peers, pfs_send_renew},
+    {pfs_wait_for_lifetime_renew, fev_res_network_failure,
+     pfs_wait_after_short_life_error},
+    {pfs_wait_for_lifetime_renew, fev_res_no_resources,
+     pfs_wait_after_short_life_error},
+    {pfs_wait_for_lifetime_renew, fev_res_exc_remote_peers,
+     pfs_wait_after_short_life_error},
     {pfs_wait_for_lifetime_renew, fev_failed, pfs_send},
-    {pfs_wait_for_lifetime_renew, fev_res_user_ex_quota, pfs_send_renew},
+    {pfs_wait_for_lifetime_renew, fev_res_user_ex_quota,
+     pfs_wait_after_short_life_error},
     {pfs_send_renew, fev_msg_sent, pfs_wait_for_lifetime_renew},
     {pfs_send_renew, fev_flow_timedout, pfs_send_renew},
     {pfs_send_renew, fev_failed, pfs_send},
@@ -489,17 +493,29 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     return fev_none;
 }
 
+// Supported platforms use signed 32-bit or 64-bit time_t.
+typedef char pcp_time_t_must_be_signed_32_or_64_bits
+    [((time_t)-1 < (time_t)0 &&
+      (sizeof(time_t) == sizeof(int32_t) || sizeof(time_t) == sizeof(int64_t)))
+         ? 1
+         : -1];
+
+static time_t response_lifetime_end(const pcp_recv_msg_t *msg) {
+    const int64_t time_max =
+        sizeof(time_t) == sizeof(int32_t) ? INT32_MAX : INT64_MAX;
+
+    if ((int64_t)msg->received_time > time_max - (int64_t)msg->recv_lifetime) {
+        return (time_t)time_max;
+    }
+    return (time_t)((int64_t)msg->received_time + msg->recv_lifetime);
+}
+
 static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
                                                pcp_recv_msg_t *msg) {
     struct timeval ctv;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
-    // avoid integer overflow
-    if (msg->recv_lifetime > (time_t)LONG_MAX - msg->received_time) {
-        f->recv_lifetime = LONG_MAX;
-    } else {
-        f->recv_lifetime = msg->received_time + msg->recv_lifetime;
-    }
+    f->recv_lifetime = response_lifetime_end(msg);
     if ((f->kd.operation == PCP_OPCODE_MAP) ||
         (f->kd.operation == PCP_OPCODE_PEER)) {
         f->map_peer.ext_ip = msg->assigned_ext_ip;
@@ -565,11 +581,7 @@ static pcp_flow_event_e fhndl_clear_timeouts(pcp_flow_t *f,
 static pcp_flow_event_e fhndl_failed(pcp_flow_t *f, pcp_recv_msg_t *msg) {
     // an error response's lifetime is how long the server will keep refusing
     if (msg && msg->recv_result != PCP_RES_SUCCESS) {
-        if (msg->recv_lifetime > (time_t)LONG_MAX - msg->received_time) {
-            f->recv_lifetime = LONG_MAX;
-        } else {
-            f->recv_lifetime = msg->received_time + msg->recv_lifetime;
-        }
+        f->recv_lifetime = response_lifetime_end(msg);
     }
 
     return fhndl_clear_timeouts(f, msg);

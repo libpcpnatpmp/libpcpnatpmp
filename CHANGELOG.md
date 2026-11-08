@@ -32,11 +32,15 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
   flows unchanged, including builds without NAT-PMP support.
 - A flow failed by a long lifetime error, such as NOT_AUTHORIZED, dropped
   the error's lifetime, which says how long the server will keep refusing.
-  `pcp_flow_get_info()` now reports it as `recv_lifetime_end`.
+  `pcp_flow_get_info()` now reports it as `recv_lifetime_end`. Expiry
+  calculations use the range of `time_t`, avoiding premature truncation at
+  2038 on Windows.
 - A short lifetime error, such as NO_RESOURCES, answered with lifetime 0 was
   resent at once, over and over. The flow now waits at least
   `PCP_MIN_ERROR_WAIT` seconds (30 by default, the lifetime RFC 6887
-  recommends for a short lifetime error) before resending.
+  recommends for a short lifetime error) before resending, including renewal
+  errors. The existing mapping address, port, and expiry are retained while
+  waiting.
 
 ## [1.0.0] - 2026-05-14
 
