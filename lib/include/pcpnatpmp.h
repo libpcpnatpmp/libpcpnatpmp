@@ -158,6 +158,8 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
 /**
  * Sets PCP nonce for all server-specific flow instances belonging to @flow.
  * Useful for renewing an existing mapping using a known nonce value.
+ * An instance whose server speaks NAT-PMP, which has no nonce, keeps the
+ * server's nonce.
  *
  * @return 0 on success, 1 on failure.
  */
