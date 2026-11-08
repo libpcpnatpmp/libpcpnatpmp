@@ -390,9 +390,7 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
                                  uint8_t version, struct sockaddr *source,
                                  struct sockaddr *destination,
                                  void (*flow_setup)(pcp_flow_t *),
-                                 const char *required_line_1,
-                                 const char *required_line_2,
-                                 const char *required_line_3) {
+                                 const char *const *required_lines) {
     pcp_ctx_t *ctx;
     pcp_flow_t *flow;
     test_pcp_server_sequence_t server_sequence;
@@ -431,10 +429,11 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
     test_pcp_server_sequence_stop(&server_sequence);
 
     log_contents = read_file(log_path);
-    TEST(contains_string(log_contents, required_line_1));
-    TEST(contains_string(log_contents, required_line_2));
-    if (required_line_3 != NULL) {
-        TEST(contains_string(log_contents, required_line_3));
+    for (; *required_lines != NULL; required_lines++) {
+        if (!contains_string(log_contents, *required_lines)) {
+            printf("log lacks '%s':\n%s\n", *required_lines, log_contents);
+            TEST(0);
+        }
     }
     free(log_contents);
     remove_log_file(log_path);
@@ -453,32 +452,63 @@ static void setup_filter(pcp_flow_t *flow) {
 static void test_log_file_cases(void) {
     struct sockaddr_storage source;
     struct sockaddr_storage destination;
+    /* The server logs every field of the request it received, so these
+     * lines check what the client put on the wire: the port reservation
+     * (protocol, internal port, suggested external port) and the options. */
+    static const char *const map_v1[] = {
+        "PCP protocol VERSION 1.", "MAP protocol: \t\t 6",
+        "MAP int port: \t\t 1234", "MAP ext port: \t\t 0", NULL};
+    static const char *const map_v2[] = {"PCP protocol VERSION 2.",
+                                         "PCP opcode:              1",
+                                         "PCP requested lifetime:  900",
+                                         "MAP protocol: \t\t 6",
+                                         "MAP int port: \t\t 1234",
+                                         "MAP ext port: \t\t 0",
+                                         "Nonce: ",
+                                         NULL};
+    static const char *const peer_v1[] = {
+        "PCP protocol VERSION 1.", "PEER Opcode specific information.",
+        "Internal port: \t\t 1234", "PEER port port: \t\t 8888", NULL};
+    static const char *const peer_v2[] = {"PCP protocol VERSION 2.",
+                                          "PCP opcode:              2",
+                                          "PEER Opcode specific information.",
+                                          "Protocol: \t\t 6",
+                                          "Internal port: \t\t 1234",
+                                          "PEER port: \t\t 8888",
+                                          "PEER IP: \t\t 127.0.0.1",
+                                          "Nonce: ",
+                                          NULL};
+    static const char *const prefer_failure[] = {
+        "PCP protocol VERSION 2.", "MAP protocol: \t\t 6",
+        "MAP int port: \t\t 1234", "OPTION: \t Prefer fail", NULL};
+    static const char *const filter[] = {"PCP protocol VERSION 2.",
+                                         "MAP int port: \t\t 1234",
+                                         "OPTION: \t Filter",
+                                         "PREFIX: 12",
+                                         "FILTER PORT: 4444",
+                                         "FILTER IP: ",
+                                         "8.8.8.8",
+                                         NULL};
 
     sock_pton("127.0.0.1:1234", (struct sockaddr *)&source);
     sock_pton("127.0.0.1:8888", (struct sockaddr *)&destination);
 
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 1,
-                         (struct sockaddr *)&source, NULL, NULL,
-                         "PCP protocol VERSION 1.", "MAP protocol:", NULL);
+                         (struct sockaddr *)&source, NULL, NULL, map_v1);
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
-                         (struct sockaddr *)&source, NULL, NULL,
-                         "PCP protocol VERSION 2.", "MAP protocol:", NULL);
-    run_logged_flow_case(
-        "test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 1,
-        (struct sockaddr *)&source, (struct sockaddr *)&destination, NULL,
-        "PCP protocol VERSION 1.", "PEER Opcode specific information.", NULL);
-    run_logged_flow_case(
-        "test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
-        (struct sockaddr *)&source, (struct sockaddr *)&destination, NULL,
-        "PCP protocol VERSION 2.", "PEER Opcode specific information.", NULL);
+                         (struct sockaddr *)&source, NULL, NULL, map_v2);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 1,
+                         (struct sockaddr *)&source,
+                         (struct sockaddr *)&destination, NULL, peer_v1);
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source,
+                         (struct sockaddr *)&destination, NULL, peer_v2);
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, setup_prefer_failure,
-                         "PCP protocol VERSION 2.",
-                         "MAP protocol:", "OPTION: \t Prefer fail");
+                         prefer_failure);
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, setup_filter,
-                         "PCP protocol VERSION 2.",
-                         "MAP protocol:", "FILTER PORT:");
+                         filter);
 }
 
 static void send_malformed_packet(const char *server_port) {

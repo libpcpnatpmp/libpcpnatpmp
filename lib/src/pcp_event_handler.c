@@ -407,7 +407,73 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg) {
 ///////////////////////////////////////////////////////////////////////////////
 //              Flow State Transitions Handlers
 
-static pcp_flow_event_e fhndl_send(pcp_flow_t *f, UNUSED pcp_recv_msg_t *msg) {
+/*
+ * Send pacing. A client with thousands of mappings (all created together, or
+ * all re-sent after a server restart) would otherwise put every request on
+ * the wire in one burst, which overflows the server's receive buffer; the
+ * lost requests then come back as synchronized retransmissions. Two limits:
+ *  - at most PCP_PACE_BURST requests per PCP_PACE_WINDOW_MS, and
+ *  - at most PCP_PACE_INFLIGHT first transmissions waiting for an answer, so
+ *    a slow server slows the client down instead of losing requests.
+ * A flow over a limit keeps its place and tries again in the next window.
+ * Retransmissions only count against the rate limit; holding them back for
+ * the in-flight limit would stall flows that are waiting for each other.
+ * RFC 6887 puts no limit on outstanding requests, so this is a courtesy to
+ * the server. PCP_PACE_BURST 0 turns pacing off.
+ */
+#ifndef PCP_PACE_BURST
+#define PCP_PACE_BURST 50
+#endif
+#ifndef PCP_PACE_WINDOW_MS
+#define PCP_PACE_WINDOW_MS 10
+#endif
+#ifndef PCP_PACE_INFLIGHT
+#define PCP_PACE_INFLIGHT 100
+#endif
+
+static int count_waiting_iter(pcp_flow_t *f, void *data) {
+    if (f->state == pfs_wait_resp) {
+        ++*(unsigned *)data;
+    }
+    return 0;
+}
+
+// returns 1 if the flow may not send now; its timeout is then set to the end
+// of the current window
+static int pace_defer(pcp_flow_t *f, int first_transmission) {
+#if PCP_PACE_BURST > 0
+    pcp_ctx_t *ctx = f->ctx;
+    struct timeval now;
+
+    gettimeofday(&now, NULL);
+    if (timeval_comp(&ctx->pace_window_end, &now) <= 0) {
+        ctx->pace_window_end = now;
+        ctx->pace_window_end.tv_usec += PCP_PACE_WINDOW_MS * 1000;
+        timeval_align(&ctx->pace_window_end);
+        ctx->pace_sent = 0;
+        ctx->pace_new = 0;
+        ctx->pace_inflight = 0;
+        pcp_db_foreach_flow(ctx, count_waiting_iter, &ctx->pace_inflight);
+    }
+    if (ctx->pace_sent >= PCP_PACE_BURST ||
+        (first_transmission &&
+         ctx->pace_inflight + ctx->pace_new >= PCP_PACE_INFLIGHT)) {
+        f->timeout = ctx->pace_window_end;
+        return 1;
+    }
+    ctx->pace_sent++;
+    if (first_transmission) {
+        ctx->pace_new++;
+    }
+    return 0;
+#else
+    (void)f;
+    (void)first_transmission;
+    return 0;
+#endif
+}
+
+static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
     pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
 
@@ -418,6 +484,17 @@ static pcp_flow_event_e fhndl_send(pcp_flow_t *f, UNUSED pcp_recv_msg_t *msg) {
 
     if (s->restart_flow_msg == f) {
         return fev_ignored;
+    }
+
+    if (f->resend_deferred) {
+        // a retransmission that pacing put off: continue its backoff
+        f->resend_deferred = 0;
+        return fhndl_resend(f, msg);
+    }
+
+    if (pace_defer(f, 1)) {
+        PCP_LOG_END(PCP_LOGLVL_DEBUG);
+        return fev_none;
     }
 
     if (pcp_flow_send_msg(f, s) != PCP_ERR_SUCCESS) {
@@ -443,6 +520,12 @@ static pcp_flow_event_e fhndl_resend(pcp_flow_t *f,
     if (!s) {
         PCP_LOG_END(PCP_LOGLVL_DEBUG);
         return fev_failed;
+    }
+
+    if (pace_defer(f, 0)) {
+        f->resend_deferred = 1;
+        PCP_LOG_END(PCP_LOGLVL_DEBUG);
+        return fev_none;
     }
 
 #if PCP_RETX_MRC > 0
@@ -548,6 +631,10 @@ static pcp_flow_event_e fhndl_send_renew(pcp_flow_t *f,
 
     if (!s) {
         return fev_failed;
+    }
+
+    if (pace_defer(f, 0)) {
+        return fev_none;
     }
 
     if (pcp_flow_send_msg(f, s) != PCP_ERR_SUCCESS) {

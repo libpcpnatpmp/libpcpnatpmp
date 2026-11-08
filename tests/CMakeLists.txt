@@ -170,3 +170,16 @@ if (NOT WIN32)
         register_pcp_shell_test (test_flow_md_sh test_flow_md.sh)
     endif ()
 endif ()
+
+# Scale test: thousands of flows and a server restart, the test server in a
+# process of its own (needs fork, so POSIX only)
+if (NOT WIN32)
+    add_executable (test_scale test_scale.c ${TEST_PCP_SERVER_HELPER_SOURCES})
+    target_link_libraries (test_scale pcpnatpmp)
+    add_test (NAME test_scale COMMAND test_scale 10000)
+    # the server taking 1 ms per request
+    add_test (NAME test_scale_slow_server COMMAND test_scale 10000 0 1000)
+    set_tests_properties (test_scale test_scale_slow_server PROPERTIES
+        RESOURCE_LOCK pcp_scale_server
+    )
+endif ()
