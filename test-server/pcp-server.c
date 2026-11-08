@@ -636,6 +636,103 @@ static int create_response(char *request, int pcp_result_code,
     return 0;
 }
 
+static void send_announce_to(pcp_test_server_t *server, const char *msg,
+                             size_t len, const struct sockaddr_storage *to) {
+    struct sockaddr_storage local, dst = *to;
+    socklen_t local_len = sizeof(local);
+    socklen_t dst_len;
+
+    if (getsockname(server->sockfd, (struct sockaddr *)&local, &local_len) ==
+        PCP_SOCKET_ERROR) {
+        perror("PCP server: getsockname");
+        return;
+    }
+    // an IPv6 socket reaches an IPv4 address IPv4-mapped
+    if (dst.ss_family == AF_INET && local.ss_family == AF_INET6) {
+        const struct sockaddr_in *in4 = (const struct sockaddr_in *)to;
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)&dst;
+
+        memset(&dst, 0, sizeof(dst));
+        in6->sin6_family = AF_INET6;
+        in6->sin6_port = in4->sin_port;
+        in6->sin6_addr.s6_addr[10] = 0xff;
+        in6->sin6_addr.s6_addr[11] = 0xff;
+        memcpy(&in6->sin6_addr.s6_addr[12], &in4->sin_addr, 4);
+    }
+    if (dst.ss_family != local.ss_family) {
+        return; // an IPv6 address from an IPv4 socket
+    }
+    dst_len = dst.ss_family == AF_INET ? sizeof(struct sockaddr_in)
+                                       : sizeof(struct sockaddr_in6);
+    if (sendto(server->sockfd, msg, (int)len, 0, (struct sockaddr *)&dst,
+               dst_len) == PCP_SOCKET_ERROR) {
+        perror("PCP server: sendto (restart announcement)");
+    }
+}
+
+// one unsolicited ANNOUNCE response (RFC 6887, 14.1.3)
+static void send_announcement(pcp_test_server_t *server) {
+    const server_info_t *info = &server->server_info;
+    char msg[sizeof(pcp_response_t)];
+    pcp_response_t *resp = (pcp_response_t *)msg;
+
+    memset(msg, 0, sizeof(msg));
+    resp->ver = info->server_version ? info->server_version : 2;
+    resp->r_opcode = 0x80 | PCP_OPCODE_ANNOUNCE;
+    resp->result_code = PCP_RES_SUCCESS;
+    resp->epochtime = htonl((uint32_t)(time(NULL) - info->epoch_time_start));
+
+    printf("PCP server: restart announcement, %d more to send\n",
+           server->announces_left - 1);
+    if (info->announce_to.ss_family != 0) {
+        send_announce_to(server, msg, sizeof(msg), &info->announce_to);
+    } else {
+        struct sockaddr_storage group;
+        struct sockaddr_in *in4 = (struct sockaddr_in *)&group;
+        struct sockaddr_in6 *in6 = (struct sockaddr_in6 *)&group;
+
+        memset(&group, 0, sizeof(group));
+        in4->sin_family = AF_INET;
+        in4->sin_port = htons(5350);
+        in4->sin_addr.s_addr = htonl(0xE0000001); // 224.0.0.1
+        send_announce_to(server, msg, sizeof(msg), &group);
+
+        memset(&group, 0, sizeof(group));
+        in6->sin6_family = AF_INET6;
+        in6->sin6_port = htons(5350);
+        in6->sin6_addr.s6_addr[0] = 0xff; // ff02::1
+        in6->sin6_addr.s6_addr[1] = 0x02;
+        in6->sin6_addr.s6_addr[15] = 0x01;
+        send_announce_to(server, msg, sizeof(msg), &group);
+    }
+}
+
+// sends the restart announcement that is due, and shortens *wait to the time
+// until the next one
+static void announce_if_due(pcp_test_server_t *server, struct timeval *wait) {
+    struct timeval now, due, until;
+
+    if (server->announces_left <= 0) {
+        return;
+    }
+    gettimeofday(&now, NULL);
+    if (timeval_comp(&server->next_announce, &now) <= 0) {
+        send_announcement(server);
+        server->announces_left--;
+        server->next_announce = now;
+        server->next_announce.tv_usec += server->announce_interval_ms * 1000;
+        timeval_align(&server->next_announce);
+        server->announce_interval_ms *= 2;
+    }
+    if (server->announces_left > 0) {
+        due = server->next_announce;
+        timeval_subtract(&until, &due, &now);
+        if (timeval_comp(&until, wait) < 0) {
+            *wait = until;
+        }
+    }
+}
+
 int pcp_test_server_start(pcp_test_server_t *server, const char *serverPort,
                           const char *serverAddress,
                           const server_info_t *server_info) {
@@ -645,6 +742,10 @@ int pcp_test_server_start(pcp_test_server_t *server, const char *serverPort,
     server->server_info = *server_info;
     server->remaining_messages =
         server_info->end_after_recv ? server_info->end_after_recv : -1;
+    server->announces_left = server_info->announce_count > PCP_TEST_MAX_ANNOUNCE
+                                 ? PCP_TEST_MAX_ANNOUNCE
+                                 : server_info->announce_count;
+    server->announce_interval_ms = 250;
 
 #ifdef WIN32
     if (pcp_win_sock_startup()) {
@@ -660,6 +761,7 @@ int pcp_test_server_start(pcp_test_server_t *server, const char *serverPort,
         return 1;
     }
     gettimeofday(&tod, NULL);
+    server->next_announce = tod;
     server->timeout_time.tv_sec = tod.tv_sec + server_info->tv.tv_sec;
     server->timeout_time.tv_usec = tod.tv_usec + server_info->tv.tv_usec;
     server->timeout_time.tv_sec += server->timeout_time.tv_usec / 1000000;
@@ -806,6 +908,7 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
     }
 
     wait_timeout = end_time;
+    announce_if_due(server, &wait_timeout);
     FD_ZERO(&read_fds);
     FD_SET(server->sockfd, &read_fds);
 
@@ -849,6 +952,7 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
             return -1;
         } // LCOV_EXCL_STOP
         time(&recvtime);
+        server->last_client = their_addr;
 
         printf("PCP server: got packet at %s from %s\n", ctime(&recvtime),
                inet_ntop(their_addr.ss_family,

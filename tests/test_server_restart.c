@@ -388,6 +388,162 @@ static void run_reservation_scenario(void) {
     remove(LOG_BEFORE_RESTART);
     remove(LOG_AFTER_RESTART);
 }
+
+static volatile int announce_server_done;
+
+typedef struct announce_server_args {
+    uint8_t requests_before_restart;
+    /* 0: the announcements go to a port nobody listens on, so the client
+     * misses all of them */
+    int announce_to_client;
+} announce_server_args_t;
+
+static void *announce_server_main(void *arg) {
+    const announce_server_args_t *args = (const announce_server_args_t *)arg;
+    server_info_t server_info;
+    pcp_test_server_t server;
+    struct sockaddr_storage client;
+
+    /* before the restart: up for an hour, answers the mappings, then goes
+     * away */
+    init_server_info(&server_info, args->requests_before_restart,
+                     LOG_BEFORE_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
+    server_info.epoch_time_start = time(NULL) - 3600;
+    TEST(pcp_test_server_start(&server, "5351", "0.0.0.0", &server_info) == 0);
+    while (pcp_test_server_is_running(&server)) {
+        TEST(pcp_test_server_pulse(&server, -1) >= 0);
+    }
+    client = server.last_client;
+    if (!args->announce_to_client) {
+        ((struct sockaddr_in *)&client)->sin_port = htons(9);
+    }
+
+    /* after the restart: epoch from 0, five restart announcements to the
+     * client it remembers (the last one 3.75 s after the first) */
+    init_server_info(&server_info, 0, LOG_AFTER_RESTART);
+    inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
+    server_info.epoch_time_start = time(NULL);
+    server_info.tv.tv_sec = 6;
+    server_info.announce_count = 5;
+    server_info.announce_to = client;
+    execPCPServer("5351", "0.0.0.0", &server_info);
+    announce_server_done = 1;
+    return NULL;
+}
+
+static int count_occurrences(const char *text, const char *needle) {
+    int n = 0;
+
+    while ((text = strstr(text, needle)) != NULL) {
+        n++;
+        text += strlen(needle);
+    }
+    return n;
+}
+
+/* the server log after the restart, empty if no request reached it (the
+ * server writes its log at the first request it gets) */
+static char *read_log_after_restart(void) {
+    FILE *f = fopen(LOG_AFTER_RESTART, "r");
+    char *log;
+
+    if (f != NULL) {
+        fclose(f);
+        return read_whole_file(LOG_AFTER_RESTART);
+    }
+    log = calloc(1, 1);
+    TEST(log != NULL);
+    return log;
+}
+
+static void expect_sent_once(const char *log, const char *line) {
+    if (count_occurrences(log, line) != 1) {
+        printf("expected '%s' once after the restart:\n%s\n", line, log);
+        TEST(0);
+    }
+}
+
+/* A server that has been up for an hour restarts and announces itself (RFC
+ * 6887, 14.1.3). The client has a mapping with FILTER and PREFER_FAILURE
+ * options that it renews only after 1800 s, so it goes out again during the
+ * test only because the client saw the restart: once, and the same as the
+ * request that created it, options included. Seen either way, a restart is
+ * an epoch lower than expected (8.5):
+ *  - announced: the first announcement; the later ones carry the expected
+ *    epoch and change nothing.
+ *  - announcements missed: the reply to the renewal of a second mapping,
+ *    renewed every 2 s. */
+static void run_announce_scenario(int client_hears_announcements) {
+    struct sockaddr_storage src, filter_ip;
+    pcp_flow_t *flow, *short_flow = NULL;
+    pcp_ctx_t *ctx;
+    pthread_t thread;
+    struct timeval end, now;
+    announce_server_args_t args;
+    char *after;
+
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
+    announce_server_done = 0;
+    args.requests_before_restart = client_hears_announcements ? 1 : 2;
+    args.announce_to_client = client_hears_announcements;
+    TEST(pthread_create(&thread, NULL, announce_server_main, &args) == 0);
+    sleep(1);
+
+    ctx = pcp_init(0, NULL);
+    TEST(ctx);
+    pcp_set_restart_delay(ctx, 0);
+    TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+    sock_pton("127.0.0.1:3004", (struct sockaddr *)&src);
+    sock_pton("8.8.8.8:4444", (struct sockaddr *)&filter_ip);
+    flow = pcp_new_flow(ctx, (struct sockaddr *)&src, NULL, NULL, IPPROTO_TCP,
+                        3600, NULL);
+    TEST(flow != NULL);
+    pcp_flow_set_filter_opt(flow, (struct sockaddr *)&filter_ip, 32);
+    pcp_flow_set_prefer_failure_opt(flow);
+    TEST(pcp_wait(flow, 3000, 0) == pcp_state_succeeded);
+    if (!client_hears_announcements) {
+        sock_pton("127.0.0.1:3005", (struct sockaddr *)&src);
+        short_flow = pcp_new_flow(ctx, (struct sockaddr *)&src, NULL, NULL,
+                                  IPPROTO_TCP, 4, NULL);
+        TEST(short_flow != NULL);
+        TEST(pcp_wait(short_flow, 3000, 0) == pcp_state_succeeded);
+    }
+
+    gettimeofday(&end, NULL);
+    end.tv_sec += 10;
+    do {
+        struct timeval tout = {0, 50000};
+        pcp_pulse(ctx, &tout);
+        select(0, NULL, NULL, NULL, &tout);
+        gettimeofday(&now, NULL);
+    } while (!announce_server_done && timercmp(&now, &end, <));
+    pthread_join(thread, NULL);
+
+    pcp_close_flow(flow);
+    pcp_delete_flow(flow);
+    if (short_flow != NULL) {
+        pcp_close_flow(short_flow);
+        pcp_delete_flow(short_flow);
+    }
+    pcp_terminate(ctx, 0);
+
+    after = read_log_after_restart();
+    expect_sent_once(after, "MAP int port: \t\t 3004");
+    free(after);
+    {
+        static const char *const must_appear[] = {
+            "MAP int port: \t\t 3004", "OPTION: \t Filter",
+            "FILTER PORT: 4444", "FILTER IP: ::ffff:8.8.8.8",
+            "OPTION: \t Prefer fail", NULL};
+        /* every request of the server before the restart, 3005 included
+         * when it is there, comes back unchanged */
+        check_reservations_resent(must_appear);
+    }
+    remove(LOG_BEFORE_RESTART);
+    remove(LOG_AFTER_RESTART);
+}
 #endif /* !WIN32 */
 
 int main(void) {
@@ -399,6 +555,8 @@ int main(void) {
     run_scenario(1, 0);
 #ifndef WIN32
     run_reservation_scenario();
+    run_announce_scenario(1);
+    run_announce_scenario(0);
 #endif
 
     PD_SOCKET_CLEANUP();

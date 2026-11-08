@@ -29,6 +29,8 @@ CLI options/help
     --app-bit           set application bit in SADSCP opcode response
     --ret-dscp          return DSCP value for SADSCP opcode
     --log-file          Log Requests to file
+    --announce #num     Send #num restart announcements (0-10) to
+                        224.0.0.1:5350 and [ff02::1]:5350 at start
 
 
 Running pcp-server
