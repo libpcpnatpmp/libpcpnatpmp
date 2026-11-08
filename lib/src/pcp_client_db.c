@@ -98,6 +98,80 @@ void pcp_flow_clear_msg_buf(pcp_flow_t *f) {
     }
 }
 
+void pcp_flow_filters_resend(pcp_flow_t *f) {
+    uint16_t i;
+
+    for (i = 0; i < f->filter_count; i++) {
+        f->filters[i].state = PCP_FILTER_PENDING;
+    }
+}
+
+uint16_t pcp_flow_filters_accepted(const pcp_flow_t *f) {
+    uint16_t i, n = 0;
+
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_CONFIRMED) {
+            n++;
+        }
+    }
+    return n;
+}
+
+int pcp_flow_filters_in_request(const pcp_flow_t *f) {
+    uint16_t i;
+
+    if (f->filter_reset_sent) {
+        return 1;
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int pcp_flow_filters_confirmed(pcp_flow_t *f) {
+    uint16_t i;
+    int confirmed = 0;
+
+    if (f->filter_reset_sent) {
+        confirmed = 1;
+        f->filter_reset = 0;
+        f->filter_reset_sent = 0;
+        if (f->filter_count == 0) {
+            f->filter_sent = 0;
+        }
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            f->filters[i].state = PCP_FILTER_CONFIRMED;
+            confirmed = 1;
+        }
+    }
+    return confirmed;
+}
+
+int pcp_flow_filters_pending(const pcp_flow_t *f) {
+    pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
+    uint16_t i;
+
+    /* NAT-PMP has no FILTER option */
+    if (s != NULL && s->pcp_version == 0) {
+        return 0;
+    }
+    if (f->filter_reset) {
+        return 1;
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_PENDING ||
+            f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 pcp_errno pcp_delete_flow_intern(pcp_flow_t *f) {
     pcp_server_t *s;
 
@@ -108,6 +182,8 @@ pcp_errno pcp_delete_flow_intern(pcp_flow_t *f) {
     if (f->pcp_msg_buffer) {
         free(f->pcp_msg_buffer);
     }
+
+    free(f->filters);
 
 #ifdef PCP_EXPERIMENTAL
     if (f->md_vals) {

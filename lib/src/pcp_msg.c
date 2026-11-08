@@ -50,20 +50,91 @@
 #include "pcp_msg_structs.h"
 #include "pcp_utils.h"
 
-static void *add_filter_option(pcp_flow_t *f, void *cur) {
+static void *add_filter_option(pcp_flow_t *f, void *cur,
+                               const struct pcp_flow_filter *filter) {
     pcp_filter_option_t *filter_op = (pcp_filter_option_t *)cur;
+    size_t used = (size_t)((const char *)cur - f->pcp_msg_buffer);
 
+    if (used + sizeof(*filter_op) > PCP_MAX_LEN) {
+        return NULL;
+    }
     filter_op->option = PCP_OPTION_FILTER;
     filter_op->reserved = 0;
     filter_op->len =
         htons(sizeof(pcp_filter_option_t) - sizeof(pcp_options_hdr_t));
     filter_op->reserved2 = 0;
-    filter_op->filter_prefix = f->filter_prefix;
-    filter_op->filter_peer_port = f->filter_port;
-    memcpy(&filter_op->filter_peer_ip, &f->filter_ip,
+    filter_op->filter_prefix = filter->prefix;
+    filter_op->filter_peer_port = filter->port;
+    memcpy(&filter_op->filter_peer_ip, &filter->ip,
            sizeof(filter_op->filter_peer_ip));
-    cur = filter_op->next_data;
+    return filter_op->next_data;
+}
 
+/* the FILTER options the server does not have yet, as many as fit in
+ * PCP_MAX_LEN; the rest go in the next requests (see
+ * fhndl_received_success()). It is the last option written, so the space
+ * check covers the options before it. A pending reset goes first: a FILTER
+ * with prefix length 0 removes the filters the server has (RFC 6887 section
+ * 13.3), the ones after it are added. */
+static void *add_filter_options(pcp_flow_t *f, void *cur) {
+    uint16_t i, written = 0, pending = 0;
+    int full = 0;
+    void *next;
+
+    /* forget what an earlier request carried: it is sent again unless the
+     * server accepted it */
+    f->filter_reset_sent = 0;
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            f->filters[i].state = PCP_FILTER_PENDING;
+        }
+    }
+    if (f->filter_reset) {
+        struct pcp_flow_filter none;
+
+        memset(&none, 0, sizeof(none));
+        next = add_filter_option(f, cur, &none);
+        if (next == NULL) {
+            PCP_LOG(PCP_LOGLVL_WARN, "%s",
+                    "no room for the FILTER option that removes filters");
+            return cur;
+        }
+        cur = next;
+        f->filter_reset_sent = 1;
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state != PCP_FILTER_PENDING) {
+            continue;
+        }
+        pending++;
+        next = full ? NULL : add_filter_option(f, cur, &f->filters[i]);
+        if (next == NULL) {
+            full = 1; /* no room left in the message, only counting */
+            continue;
+        }
+        cur = next;
+        f->filters[i].state = PCP_FILTER_IN_REQUEST;
+        f->filter_sent = 1;
+        written++;
+    }
+    if (written < pending) {
+        /* a filter that cannot go in any request (the message is full of
+         * other options) is not sent until the filters are sent again */
+        int never = written == 0 && full;
+        pcp_loglvl_e level = never ? PCP_LOGLVL_WARN : PCP_LOGLVL_DEBUG;
+
+        PCP_LOG(level, "%u of %u pending FILTER options in the request%s",
+                (unsigned)written, (unsigned)pending,
+                never ? ", the rest are not sent"
+                      : ", the rest go in the next ones");
+        if (never) {
+            for (i = 0; i < f->filter_count; i++) {
+                if (f->filters[i].state == PCP_FILTER_PENDING) {
+                    f->filters[i].state = PCP_FILTER_REFUSED;
+                }
+            }
+        }
+    }
     return cur;
 }
 
@@ -190,10 +261,6 @@ static pcp_errno build_pcp_options(pcp_flow_t *flow, void *cur) {
         cur = add_flowp_option(flow, cur);
     }
 #endif
-    if (flow->filter_option_present) {
-        cur = add_filter_option(flow, cur);
-    }
-
     if (flow->pfailure_option_present) {
         cur = add_prefer_failure_option(cur);
     }
@@ -217,6 +284,8 @@ static pcp_errno build_pcp_options(pcp_flow_t *flow, void *cur) {
         cur = add_md_options(flow, cur);
     }
 #endif
+    /* last, see add_filter_options() */
+    cur = add_filter_options(flow, cur);
 
     {
         ptrdiff_t msg_len = ((char *)cur) - flow->pcp_msg_buffer;

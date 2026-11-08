@@ -323,7 +323,7 @@ static void *reservation_server_main(void *arg UNUSED) {
 
 /* MAP, MAP with a FILTER option and PEER reservations all come back, with
  * their options, when the server restarts. The restart shows in the epoch of
- * the first renewal's reply. */
+ * the first renewal's reply; a renewal itself carries no FILTER option. */
 static void run_reservation_scenario(void) {
     struct sockaddr_storage src[3], dst, filter_ip;
     pcp_flow_t *flow[3];

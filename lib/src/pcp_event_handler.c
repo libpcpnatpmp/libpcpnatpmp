@@ -508,7 +508,9 @@ static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
         return fev_failed;
     }
 
-    if (s->restart_flow_msg == f) {
+    /* the reply that showed the restart renewed this flow already, but
+     * maybe without its FILTER options */
+    if (s->restart_flow_msg == f && !pcp_flow_filters_pending(f)) {
         return fev_ignored;
     }
 
@@ -599,6 +601,12 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     gettimeofday(&f->timeout, NULL);
     f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
 
+    /* the server's mapping ends before the next try: that request creates
+     * it again, so it carries every filter */
+    if (f->timeout.tv_sec >= f->recv_lifetime) {
+        pcp_flow_filters_resend(f);
+    }
+
     return fev_none;
 }
 
@@ -635,6 +643,16 @@ static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
 #endif
     }
     f->recv_result = msg->recv_result;
+
+    /* the server has the FILTER options of the request. If the flow has more
+     * than fit in one request, send the next ones now instead of with the
+     * renewal; only when that request carried some, so a request with no
+     * room for any does not repeat forever */
+    if (pcp_flow_filters_confirmed(f) && msg->recv_lifetime != 0 &&
+        pcp_flow_filters_pending(f)) {
+        PCP_LOG_END(PCP_LOGLVL_DEBUG);
+        return fev_send;
+    }
 
     gettimeofday(&ctv, NULL);
 
@@ -741,6 +759,14 @@ static pcp_flow_state_e handle_flow_event(pcp_flow_t *f, pcp_flow_event_e ev,
         }
 
         next_state = esm->new_state;
+
+        /* the server may have lost the mapping and its filters: it
+         * restarted, the renewal failed, or the flow failed */
+        if (ev == fev_server_restarted || next_state == pfs_failed ||
+            (ev == fev_failed && (cur_state == pfs_wait_for_lifetime_renew ||
+                                  cur_state == pfs_send_renew))) {
+            pcp_flow_filters_resend(f);
+        }
 
         for (trans = flow_transitions; trans < trans_end; ++trans) {
             if (((trans->state_from == cur_state) ||

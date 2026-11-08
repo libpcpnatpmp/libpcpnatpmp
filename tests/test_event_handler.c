@@ -153,6 +153,49 @@ int main(void) {
             printf("%d\n",r);
         }*/
 
+    // test 8: FILTER options after an error reply
+    {
+        struct sockaddr_in server, src, fip;
+        pcp_flow_t *f;
+        pcp_recv_msg_t msg;
+        struct timeval now;
+
+        memset(&server, 0, sizeof(server));
+        server.sin_family = AF_INET;
+        inet_pton(AF_INET, "127.0.0.1", &server.sin_addr);
+        server.sin_port = htons(5351);
+        src = server;
+        src.sin_port = htons(1240);
+        memset(&fip, 0, sizeof(fip));
+        fip.sin_family = AF_INET;
+        inet_pton(AF_INET, "8.8.8.8", &fip.sin_addr);
+        fip.sin_port = htons(4444);
+
+        TEST(pcp_add_server(ctx, (struct sockaddr *)&server, 2) >= 0);
+        f = pcp_new_flow(ctx, (struct sockaddr *)&src, NULL, NULL, IPPROTO_TCP,
+                         100, NULL);
+        TEST(f != NULL);
+        TEST(pcp_flow_set_filter_opt(f, (struct sockaddr *)&fip, 32) ==
+             PCP_ERR_SUCCESS);
+        f->filters[0].state = PCP_FILTER_CONFIRMED;
+        memset(&msg, 0, sizeof(msg));
+        msg.recv_result = PCP_RES_NO_RESOURCES;
+        msg.recv_lifetime = 60;
+        gettimeofday(&now, NULL);
+
+        // the mapping outlives the wait: the next try renews it, without
+        // the filter the server has
+        f->recv_lifetime = now.tv_sec + 600;
+        fhndl_shortlifeerror(f, &msg);
+        TEST(f->filters[0].state == PCP_FILTER_CONFIRMED);
+
+        // the mapping ends during the wait: the next try creates it again,
+        // with every filter
+        f->recv_lifetime = now.tv_sec + 30;
+        fhndl_shortlifeerror(f, &msg);
+        TEST(f->filters[0].state == PCP_FILTER_PENDING);
+    }
+
     pcp_terminate(ctx, 1);
 
     PD_SOCKET_CLEANUP();

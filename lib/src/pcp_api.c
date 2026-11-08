@@ -120,6 +120,7 @@ pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt) {
     } else {
         ctx->virt_socket_tb = &default_socket_vt;
     }
+    ctx->max_filter_opts = PCP_MAX_FILTER_OPTIONS;
 
     ctx->socket = pcp_socket_create(ctx,
 #ifdef PCP_USE_IPV6_SOCKET
@@ -585,61 +586,196 @@ void pcp_flow_set_3rd_party_opt(pcp_flow_t *f, struct sockaddr *thirdp_addr) {
     }
 }
 
-void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
-                             uint8_t filter_prefix) {
+static int filter_equal(const struct pcp_flow_filter *a,
+                        const struct pcp_flow_filter *b) {
+    return a->prefix == b->prefix && a->port == b->port &&
+           memcmp(&a->ip, &b->ip, sizeof(a->ip)) == 0;
+}
+
+/* keep the first keep filters of the flow. A server keeps the filters it was
+ * sent until a FILTER with prefix length 0 removes them, so mark the flow to
+ * send one if it may have sent the dropped ones; that removes all of them, so
+ * the kept ones are sent again after it. */
+static void flow_drop_filters(pcp_flow_t *f, uint16_t keep) {
+    f->filter_count = keep;
+    if (f->filter_sent) {
+        f->filter_reset = 1;
+        f->filter_reset_sent = 0;
+        pcp_flow_filters_resend(f);
+    }
+}
+
+static int flow_has_filter(const pcp_flow_t *f,
+                           const struct pcp_flow_filter *nf) {
+    uint16_t i;
+
+    for (i = 0; i < f->filter_count; i++) {
+        if (filter_equal(&f->filters[i], nf)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* make room for the filter nf on the flow f without changing its filters, so
+ * flow_add_filter() cannot fail */
+static pcp_errno flow_reserve_filter(pcp_flow_t *f,
+                                     const struct pcp_flow_filter *nf) {
+    uint32_t need; /* wider than filter_count, which may be UINT16_MAX */
+
+    if (flow_has_filter(f, nf)) {
+        return PCP_ERR_SUCCESS;
+    }
+    need = (f->filter_mode == PCP_FILTER_MODE_ONE)
+               ? 1
+               : (uint32_t)f->filter_count + 1;
+    if (need > f->ctx->max_filter_opts) {
+        PCP_LOG(PCP_LOGLVL_WARN,
+                "a flow has at most %u FILTER options, this one is not added",
+                (unsigned)f->ctx->max_filter_opts);
+        return PCP_ERR_MAX_SIZE;
+    }
+    if (need > f->filter_cap) {
+        uint32_t cap = f->filter_cap ? (uint32_t)f->filter_cap * 2 : 1;
+        struct pcp_flow_filter *filters;
+
+        if (cap > f->ctx->max_filter_opts) {
+            cap = f->ctx->max_filter_opts;
+        }
+        filters = (struct pcp_flow_filter *)realloc(f->filters,
+                                                    cap * sizeof(*filters));
+        if (filters == NULL) {
+            PCP_LOG(PCP_LOGLVL_ERR, "%s",
+                    "Malloc can't allocate the filters of the flow.");
+            return PCP_ERR_NO_MEM;
+        }
+        f->filters = filters;
+        f->filter_cap = (uint16_t)cap;
+    }
+    return PCP_ERR_SUCCESS;
+}
+
+/* add the filter nf to the flow f (or replace its filter, PCP_FILTER_MODE_ONE)
+ * after flow_reserve_filter() made room. returns 1 if the filters of the flow
+ * changed */
+static int flow_add_filter(pcp_flow_t *f, const struct pcp_flow_filter *nf) {
+    if (flow_has_filter(f, nf)) {
+        return 0;
+    }
+    if (f->filter_mode == PCP_FILTER_MODE_ONE && f->filter_count > 0) {
+        flow_drop_filters(f, 0);
+    }
+    f->filters[f->filter_count++] = *nf;
+    return 1;
+}
+
+int pcp_set_max_filter_opts(pcp_ctx_t *ctx, uint16_t max) {
+    if (!ctx || max == 0) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s: invalid context or limit %u",
+                __FUNCTION__, (unsigned)max);
+        return PCP_ERR_BAD_ARGS;
+    }
+    ctx->max_filter_opts = max;
+    return PCP_ERR_SUCCESS;
+}
+
+int pcp_flow_set_filter_mode(pcp_flow_t *f, pcp_filter_mode_e mode) {
     pcp_flow_t *fiter;
-    struct in6_addr wire_ip;
-    uint16_t wire_port;
-    uint8_t wire_prefix;
+
+    if (!f || (mode != PCP_FILTER_MODE_MULTI && mode != PCP_FILTER_MODE_ONE)) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s: invalid flow or filter mode %d",
+                __FUNCTION__, (int)mode);
+        return PCP_ERR_BAD_ARGS;
+    }
+
+    for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
+        fiter->filter_mode = (uint8_t)mode;
+        if (mode == PCP_FILTER_MODE_ONE && fiter->filter_count > 1) {
+            /* keep the last filter in the list */
+            fiter->filters[0] = fiter->filters[fiter->filter_count - 1];
+            flow_drop_filters(fiter, 1);
+            pcp_flow_updated(fiter);
+        }
+    }
+    return PCP_ERR_SUCCESS;
+}
+
+int pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
+                            uint8_t filter_prefix) {
+    pcp_flow_t *fiter;
+    struct pcp_flow_filter nf;
 
     if (!f || !filter_ip ||
         (filter_ip->sa_family != AF_INET && filter_ip->sa_family != AF_INET6)) {
         PCP_LOG(PCP_LOGLVL_PERR, "%s: invalid flow or filter address",
                 __FUNCTION__);
-        return;
+        return PCP_ERR_BAD_ARGS;
     }
 
-    pcp_fill_in6_addr(&wire_ip, &wire_port, NULL, filter_ip);
+    memset(&nf, 0, sizeof(nf));
+    pcp_fill_in6_addr(&nf.ip, &nf.port, NULL, filter_ip);
 
-    /* RFC 6887 section 13.3: an IPv4 peer is sent IPv4-mapped, so its prefix
-     * length goes on the wire plus 96 (valid: 96 to 128). Decide on the
-     * address that is sent, so an IPv4 peer given as AF_INET6 ::ffff:a.b.c.d
-     * is handled the same as one given as AF_INET.
-     * Prefix 0 removes all filters, and is valid only for an IPv6 address:
-     * with an IPv4-mapped one, even ::ffff:0:0, it is MALFORMED_OPTION.
-     * So a removal is sent as ::/0, port 0, whatever peer was given. */
+    /* RFC 6887 section 13.3: prefix length 0 removes all filters, and is valid
+     * only for an IPv6 address: with an IPv4-mapped one, even ::ffff:0:0, it
+     * is MALFORMED_OPTION. So any filter_ip with prefix 0 clears the filters
+     * like pcp_flow_clear_filter_opts(), whose removal is sent as ::/0, port
+     * 0. */
     if (filter_prefix == 0) {
-        memset(&wire_ip, 0, sizeof(wire_ip));
-        wire_port = 0;
-        wire_prefix = 0;
-    } else if (IN6_IS_ADDR_V4MAPPED(&wire_ip)) {
+        pcp_flow_clear_filter_opts(f);
+        return PCP_ERR_SUCCESS;
+    }
+
+    /* An IPv4 peer is sent IPv4-mapped, so its prefix length goes on the wire
+     * plus 96 (valid: 96 to 128). Decide on the address that is sent, so an
+     * IPv4 peer given as AF_INET6 ::ffff:a.b.c.d is handled the same as one
+     * given as AF_INET. */
+    if (IN6_IS_ADDR_V4MAPPED(&nf.ip)) {
         if (filter_prefix <= 32) {
-            wire_prefix = filter_prefix + 96;
+            nf.prefix = filter_prefix + 96;
         } else if (filter_prefix >= 96 && filter_prefix <= 128) {
-            wire_prefix = filter_prefix;
+            nf.prefix = filter_prefix;
         } else {
             PCP_LOG(PCP_LOGLVL_PERR,
                     "%s: invalid prefix length %u for an IPv4 filter address "
                     "(valid: 0 to 32, or 96 to 128 already adjusted)",
                     __FUNCTION__, (unsigned)filter_prefix);
-            return;
+            return PCP_ERR_BAD_ARGS;
         }
     } else if (filter_prefix <= 128) {
-        wire_prefix = filter_prefix;
+        nf.prefix = filter_prefix;
     } else {
         PCP_LOG(PCP_LOGLVL_PERR,
                 "%s: invalid prefix length %u for an IPv6 filter address "
                 "(valid: 0 to 128)",
                 __FUNCTION__, (unsigned)filter_prefix);
-        return;
+        return PCP_ERR_BAD_ARGS;
     }
 
+    /* all or nothing: room on every flow first, so no flow differs from
+     * the others when one cannot take the filter */
     for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
-        fiter->filter_option_present = 1;
-        fiter->filter_ip = wire_ip;
-        fiter->filter_port = wire_port;
-        fiter->filter_prefix = wire_prefix;
-        pcp_flow_updated(fiter);
+        pcp_errno ret = flow_reserve_filter(fiter, &nf);
+
+        if (ret != PCP_ERR_SUCCESS) {
+            return ret;
+        }
+    }
+    for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
+        if (flow_add_filter(fiter, &nf)) {
+            pcp_flow_updated(fiter);
+        }
+    }
+    return PCP_ERR_SUCCESS;
+}
+
+void pcp_flow_clear_filter_opts(pcp_flow_t *f) {
+    pcp_flow_t *fiter;
+
+    for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
+        if (fiter->filter_count) {
+            flow_drop_filters(fiter, 0);
+            pcp_flow_updated(fiter);
+        }
     }
 }
 
