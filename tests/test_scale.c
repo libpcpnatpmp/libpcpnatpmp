@@ -26,6 +26,7 @@
 #endif
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
@@ -60,6 +61,22 @@ static size_t succeeded_count;
 static size_t sent_total, sent_map, sent_peer, sent_with_options;
 static size_t sent_max_len;
 static pcp_socket_vt_t counting_vt;
+static pid_t server_pid = -1;
+
+static void cleanup_server(void) {
+    if (server_pid > 0) {
+        if (kill(server_pid, SIGTERM) < 0 && errno != ESRCH) {
+            perror("kill scale server");
+        }
+        while (waitpid(server_pid, NULL, 0) < 0) {
+            if (errno != EINTR) {
+                perror("waitpid scale server");
+                break;
+            }
+        }
+        server_pid = -1;
+    }
+}
 
 /* Wraps the library's sendto to see every request it puts on the wire. */
 static ssize_t counting_sendto(PCP_SOCKET sock, const void *buf, size_t len,
@@ -162,13 +179,18 @@ static long udp_rcvbuf_errors(void) {
 /* The server runs in a process of its own and answers until it is killed, so
  * it drains its socket while the client sends. */
 static pid_t start_server(int uptime_s, int delay_us) {
-    pid_t pid = fork();
+    int ready_pipe[2];
+    char ready;
+    pid_t pid;
 
+    TEST(pipe(ready_pipe) == 0);
+    pid = fork();
     TEST(pid >= 0);
     if (pid == 0) {
         server_info_t info;
         pcp_test_server_t server;
 
+        close(ready_pipe[0]);
         memset(&info, 0, sizeof(info));
         info.server_version = 2;
         info.default_result_code = 255;
@@ -180,19 +202,37 @@ static pid_t start_server(int uptime_s, int delay_us) {
                 0) {
             _exit(1);
         }
+        if (write(ready_pipe[1], "R", 1) != 1) {
+            _exit(1);
+        }
+        close(ready_pipe[1]);
         for (;;) {
-            if (pcp_test_server_pulse(&server, 1000) > 0 && delay_us > 0) {
+            int result = pcp_test_server_pulse(&server, 1000);
+            if (result < 0) {
+                _exit(1);
+            }
+            if (result > 0 && delay_us > 0) {
                 usleep((useconds_t)delay_us);
             }
         }
     }
-    usleep(300000); /* let it bind */
+    server_pid = pid;
+    close(ready_pipe[1]);
+    {
+        fd_set read_fds;
+        struct timeval timeout = {5, 0};
+        FD_ZERO(&read_fds);
+        FD_SET(ready_pipe[0], &read_fds);
+        TEST(select(ready_pipe[0] + 1, &read_fds, NULL, NULL, &timeout) == 1);
+    }
+    TEST(read(ready_pipe[0], &ready, 1) == 1 && ready == 'R');
+    close(ready_pipe[0]);
     return pid;
 }
 
 static void stop_server(pid_t pid) {
-    kill(pid, SIGTERM);
-    waitpid(pid, NULL, 0);
+    TEST(pid == server_pid);
+    cleanup_server();
 }
 
 int main(int argc, char **argv) {
@@ -208,6 +248,7 @@ int main(int argc, char **argv) {
     long drops0, drops1;
 
     TEST(n >= 3 && n <= MAX_FLOWS);
+    TEST(atexit(cleanup_server) == 0);
     PD_SOCKET_STARTUP();
     pcp_log_level = PCP_LOGLVL_ERR;
 
