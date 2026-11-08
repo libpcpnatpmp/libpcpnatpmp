@@ -18,6 +18,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #ifdef WIN32
 #include "pcp_win_defines.h"
 #else
@@ -49,6 +50,8 @@ int main(int argc, char *argv[]) {
     pcp_ctx_t *ctx;
     test_pcp_server_sequence_t server_sequence;
     test_pcp_server_config_t server_config;
+    uint32_t nonce_words_be[3] = {htonl(0x00112233), htonl(0x44556677),
+                                  htonl(0x8899aabb)};
 
     PD_SOCKET_STARTUP();
     version = (argc == 2) ? (uint8_t)atoi(argv[1]) : PCP_MAX_SUPPORTED_VERSION;
@@ -82,6 +85,12 @@ int main(int argc, char *argv[]) {
                         (struct sockaddr *)&destination,
                         (struct sockaddr *)&ext, protocol, lifetime, NULL);
 
+    TEST(flow != NULL);
+    TEST(pcp_flow_set_nonce(flow, nonce_words_be) == 0);
+    if (version >= 2) {
+        TEST(memcmp(flow->kd.nonce.n, nonce_words_be,
+                    sizeof(flow->kd.nonce.n)) == 0);
+    }
     TEST(test_pcp_wait_with_servers(flow, 2000, &server_sequence) ==
          pcp_state_succeeded);
     flow_info = pcp_flow_get_info(flow, &flow_count);
@@ -89,6 +98,12 @@ int main(int argc, char *argv[]) {
     printf("Flow result code %d \n", flow_info->pcp_result_code);
     s = get_pcp_server(ctx, flow->pcp_server_indx);
     TEST((s) && (s->pcp_version == 1));
+    TEST(flow_info->pcp_version == 1);
+    TEST(memcmp(&flow->kd.nonce, &s->nonce, sizeof(s->nonce)) == 0);
+    TEST(pcp_get_flow(&flow->kd, s) == flow);
+    TEST(pcp_flow_set_nonce(flow, nonce_words_be) == 0);
+    TEST(memcmp(&flow->kd.nonce, &s->nonce, sizeof(s->nonce)) == 0);
+    TEST(pcp_get_flow(&flow->kd, s) == flow);
 
     pcp_close_flow(flow);
     pcp_delete_flow(flow);

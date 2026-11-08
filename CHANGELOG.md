@@ -6,7 +6,30 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 
 ## [Unreleased]
 
+### Added
+
+- `pcp_flow_info_t.pcp_version`: the protocol version spoken with the flow's
+  server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
+
 ### Fixed
+
+- A flow from a global IPv6 address through a link-local server (the usual
+  default router) got no matching replies, since its key kept the source's
+  scope while each reply's key has none. Only a link-local source now keeps a
+  scope, and it must still be the server's.
+- Replies to a flow whose nonce was set with `pcp_flow_set_nonce()` never
+  matched it: the flow stayed filed under its old nonce. It is now filed again
+  under the new one.
+- The test server, listening on all addresses, answered IPv6 requests from
+  whatever address routing picked rather than the one asked, so a client that
+  asked its link-local address dropped every answer. It now answers from the
+  address each request was sent to.
+- A NAT-PMP reply, which carries no nonce, never matched a flow whose nonce
+  was set with `pcp_flow_set_nonce()`: it is looked up under the server's
+  nonce. A flow to a server that speaks NAT-PMP now keeps the server's nonce.
+- PCP version 1 replies also carry no nonce. Flows now keep the server's nonce
+  when negotiating down to version 1, and `pcp_flow_set_nonce()` leaves those
+  flows unchanged, including builds without NAT-PMP support.
 - A flow failed by a long lifetime error, such as NOT_AUTHORIZED, dropped
   the error's lifetime, which says how long the server will keep refusing.
   `pcp_flow_get_info()` now reports it as `recv_lifetime_end`.

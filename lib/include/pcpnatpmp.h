@@ -158,6 +158,8 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
 /**
  * Sets PCP nonce for all server-specific flow instances belonging to @flow.
  * Useful for renewing an existing mapping using a known nonce value.
+ * Instances whose servers speak PCP version 1 or NAT-PMP, which have no nonce,
+ * keep the server's nonce.
  *
  * @return 0 on success, 1 on failure.
  */
@@ -267,6 +269,7 @@ typedef struct pcp_flow_info {
     uint16_t dst_port; // network byte order
     uint8_t protocol;
     uint8_t learned_dscp; // relevant only for flow created by pcp_learn_dscp
+    uint8_t pcp_version; // version spoken with this flow's server; 0 is NAT-PMP
 } pcp_flow_info_t;
 
 // Allocates info_buf by malloc, has to be freed by client when no longer

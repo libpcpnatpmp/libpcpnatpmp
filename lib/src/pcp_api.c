@@ -364,9 +364,16 @@ static int chain_and_assign_src_ip(pcp_server_t *s, void *data) {
         return 0;
     }
 
-    // check matching scope
-    if (kd.scope_id != s->pcp_scope_id) {
-        return 0;
+    // Only a link-local source has a scope, and it must be the server's.
+    // A reply's key takes the scope of the address it arrived at, which a
+    // global source has none of, so its flow keeps none either: otherwise
+    // no reply from a link-local server would ever match it.
+    if (IN6_IS_ADDR_LINKLOCAL(&kd.src_ip)) {
+        if (kd.scope_id != s->pcp_scope_id) {
+            return 0;
+        }
+    } else {
+        kd.scope_id = 0;
     }
 
     memcpy(&kd.pcp_server_ip, s->pcp_ip, sizeof(kd.pcp_server_ip));
@@ -508,7 +515,22 @@ int pcp_flow_set_nonce(pcp_flow_t *flow, const uint32_t nonce_words_be[3]) {
     }
 
     for (iter = flow; iter != NULL; iter = iter->next_child) {
+        pcp_server_t *s = get_pcp_server(iter->ctx, iter->pcp_server_indx);
+        int was_filed;
+
+        // PCP v1 and NAT-PMP replies have no nonce and use the server's.
+        if (s && s->pcp_version < 2) {
+            continue;
+        }
+
+        // The flow table files a flow by a hash of its key, nonce included,
+        // and replies are looked up by theirs: file it again under the new one.
+        was_filed = pcp_db_rem_flow(iter) == PCP_ERR_SUCCESS;
+
         memcpy(iter->kd.nonce.n, nonce_words_be, sizeof(iter->kd.nonce.n));
+        if (was_filed) {
+            pcp_db_add_flow(iter);
+        }
     }
 
     return 0;
@@ -713,6 +735,11 @@ pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count) {
 
     for (fiter = f, info_iter = info_buf; fiter != NULL;
          fiter = fiter->next_child, ++info_iter) {
+        pcp_server_t *s = get_pcp_server(fiter->ctx, fiter->pcp_server_indx);
+
+        if (s) {
+            info_iter->pcp_version = s->pcp_version;
+        }
 
         switch (fiter->state) {
         case pfs_wait_after_short_life_error:

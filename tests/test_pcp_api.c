@@ -129,6 +129,13 @@ int main(void) {
              0);
         TEST(memcmp(f1->next_child->kd.nonce.n, nonce_words_be,
                     sizeof(f1->next_child->kd.nonce.n)) == 0);
+        // a reply carrying the new nonce finds its flow
+        TEST(pcp_get_flow(&f1->kd, get_pcp_server(ctx, f1->pcp_server_indx)) ==
+             f1);
+        TEST(pcp_get_flow(
+                 &f1->next_child->kd,
+                 get_pcp_server(ctx, f1->next_child->pcp_server_indx)) ==
+             f1->next_child);
 
         req = (pcp_request_t *)build_pcp_msg(f1);
         TEST(req != NULL);
@@ -153,6 +160,53 @@ int main(void) {
     TEST(ctx->pcp_db.flow_cnt > 0);
     pcp_terminate(ctx, 1);
     TEST(ctx->pcp_db.flow_cnt == 0);
+
+    // regression test: a global source keeps no scope, whatever the caller
+    // passed, since replies arrive at a global address and carry none; only
+    // a link-local source has one, which must be the server's
+    {
+        struct sockaddr_in6 global_src;
+        struct sockaddr_in6 link_local_src;
+
+        memcpy(&global_src, Sock_pton("[2001:db8::1]:1234"),
+               sizeof(global_src));
+        global_src.sin6_scope_id = 1;
+        memcpy(&link_local_src, Sock_pton("[fe80::2]:1234"),
+               sizeof(link_local_src));
+        link_local_src.sin6_scope_id = 2;
+
+        ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        TEST(pcp_add_server(ctx, Sock_pton("[::1]:5351"), 2) == 0);
+        TEST((f1 = pcp_new_flow(ctx, (struct sockaddr *)&global_src, NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(f1->kd.scope_id == 0);
+        TEST(pcp_new_flow(ctx, (struct sockaddr *)&link_local_src, NULL, NULL,
+                          IPPROTO_TCP, 100, NULL) == NULL);
+        pcp_terminate(ctx, 1);
+    }
+
+    // a flow to a nonce-free server keeps the server's nonce, under which the
+    // answers, which carry none, are looked up
+    for (int version = 0; version < 2; ++version) {
+        uint32_t nonce_words_be[3] = {htonl(0x00112233), htonl(0x44556677),
+                                      htonl(0x8899aabb)};
+        pcp_server_t *natpmp;
+
+        ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5351"), 2) == 1);
+        natpmp = get_pcp_server(ctx, 1);
+        natpmp->pcp_version = version;
+        TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(f1->next_child != NULL);
+        TEST(pcp_flow_set_nonce(f1, nonce_words_be) == 0);
+        TEST(memcmp(f1->kd.nonce.n, nonce_words_be, sizeof(f1->kd.nonce.n)) ==
+             0);
+        TEST(memcmp(&f1->next_child->kd.nonce, &natpmp->nonce,
+                    sizeof(natpmp->nonce)) == 0);
+        pcp_terminate(ctx, 1);
+    }
 
     printf("Tests succeeded.\n\n");
 
