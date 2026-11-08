@@ -183,3 +183,10 @@ if (NOT WIN32)
         RESOURCE_LOCK pcp_scale_server
     )
 endif ()
+
+# Restart announcements sent to the multicast group (POSIX only: getifaddrs)
+if (NOT WIN32)
+    add_executable (test_multicast_announce test_multicast_announce.c)
+    target_link_libraries (test_multicast_announce pcpnatpmp)
+    add_test (NAME test_multicast_announce COMMAND test_multicast_announce)
+endif ()

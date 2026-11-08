@@ -64,7 +64,14 @@ int pcp_win_sock_cleanup();
 #endif
 #endif
 
+#if !defined(PCP_SOCKET_IS_VOIDPTR) && !defined(WIN32) &&                      \
+    defined(PCP_USE_IPV6_SOCKET)
+// A client that did not get port 5350 listens there on a socket of its own
+#define PCP_ANNOUNCE_LISTENER
+#endif
+
 struct pcp_ctx_s;
+struct pcp_server;
 
 extern pcp_socket_vt_t default_socket_vt;
 
@@ -87,6 +94,25 @@ ssize_t pcp_socket_sendto(struct pcp_ctx_s *ctx, const void *buf, size_t len,
                           struct sockaddr *dest_addr, socklen_t addrlen);
 
 int pcp_socket_close(struct pcp_ctx_s *ctx);
+
+// Reads a datagram from `sock` (a server's announce_socket) like
+// pcp_socket_recvfrom().
+ssize_t pcp_socket_recvfrom_sock(struct pcp_ctx_s *ctx, PCP_SOCKET sock,
+                                 void *buf, size_t len, int flags,
+                                 struct sockaddr *src_addr, socklen_t *addrlen,
+                                 struct sockaddr_in6 *dst_addr);
+
+// Join the multicast groups a restarted server announces itself to, on the
+// interface that has src_ip (or scope_id, if non-zero, for IPv6). Returns 0
+// when joined (or already joined), -1 otherwise.
+int pcp_socket_join_announce_groups(struct pcp_ctx_s *ctx,
+                                    const struct in6_addr *src_ip,
+                                    uint32_t scope_id);
+
+// Call for a server whose groups were joined: gives it a socket on port 5350
+// if the library's socket is on another port.
+void pcp_socket_listen_announce(struct pcp_server *s);
+void pcp_socket_close_announce(struct pcp_server *s);
 
 /*In Visual Studio inline keyword only available in C++ */
 #if (defined(_MSC_VER) && !defined(inline))
