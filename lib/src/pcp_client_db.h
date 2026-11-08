@@ -230,6 +230,8 @@ struct pcp_server {
     // the library's socket is not on port 5350: listening there on this one
     uint8_t announce_listening;
     PCP_SOCKET announce_socket;
+    struct in6_addr announce_src_ip;
+    uint32_t announce_scope_id;
     void *app_data;
 };
 

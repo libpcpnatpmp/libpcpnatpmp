@@ -587,6 +587,12 @@ void pcp_socket_listen_announce(struct pcp_server *s) {
 #ifdef PCP_ANNOUNCE_LISTENER
     pcp_ctx_t *ctx = s->ctx;
 
+    if (s->announce_listening &&
+        (!IN6_ARE_ADDR_EQUAL(&s->announce_src_ip,
+                             (const struct in6_addr *)s->src_ip) ||
+         s->announce_scope_id != s->pcp_scope_id)) {
+        pcp_socket_close_announce(s);
+    }
     if (s->announce_listening || bound_port(ctx->socket) == PCP_ANNOUNCE_PORT) {
         return;
     }
@@ -600,6 +606,8 @@ void pcp_socket_listen_announce(struct pcp_server *s) {
         return;
     }
     s->announce_listening = 1;
+    s->announce_src_ip = *(const struct in6_addr *)s->src_ip;
+    s->announce_scope_id = s->pcp_scope_id;
 #else
     (void)s;
 #endif

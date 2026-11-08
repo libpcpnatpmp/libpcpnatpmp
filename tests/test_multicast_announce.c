@@ -33,6 +33,7 @@
 
 #include "pcpnatpmp.h"
 
+#include "pcp_client_db.h"
 #include "pcp_msg_structs.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
@@ -268,6 +269,31 @@ static void second_client_on_host(const char *address) {
     /* a server restart seen by a client on the other port */
     TEST(announce_makes_client_resend(address, 0, NULL));
     TEST(last_client_port != ANNOUNCE_PORT);
+    {
+        pcp_ctx_t *second = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+        pcp_server_t *server;
+        char server_address[80];
+        struct in6_addr original;
+
+        TEST(second != NULL);
+        snprintf(server_address, sizeof(server_address), "%s:%d", address,
+                 SERVER_PORT);
+        TEST(pcp_add_server(second, Sock_pton(server_address), 2) == 0);
+        server = get_pcp_server(second, 0);
+        TEST(server->announce_listening);
+        original = server->announce_src_ip;
+        TEST(inet_pton(AF_INET6, "::ffff:127.0.0.1", server->src_ip) == 1);
+        pcp_socket_listen_announce(server);
+        TEST(server->announce_listening);
+        TEST(IN6_ARE_ADDR_EQUAL(&server->announce_src_ip,
+                                (struct in6_addr *)server->src_ip));
+        TEST(!IN6_ARE_ADDR_EQUAL(&server->announce_src_ip, &original));
+        memcpy(server->src_ip, &original, sizeof(original));
+        pcp_socket_listen_announce(server);
+        TEST(server->announce_listening);
+        TEST(IN6_ARE_ADDR_EQUAL(&server->announce_src_ip, &original));
+        pcp_terminate(second, 0);
+    }
 
     /* unicast to 5350 still goes to the first client */
     fd = serve_socket(address);
