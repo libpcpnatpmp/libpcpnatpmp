@@ -112,6 +112,19 @@ int main(void) {
                                      &prefix));
     TEST(-2 == sock_pton_with_prefix("[::1/129]:4444", (struct sockaddr *)&sa,
                                      &prefix));
+    // no prefix given: the full length for the address family
+    TEST(0 == sock_pton_with_prefix("[10.10.250.22]:1234",
+                                    (struct sockaddr *)&sa, &prefix));
+    TEST(sa.ss_family == AF_INET);
+    TEST(prefix == 32);
+    TEST(0 ==
+         sock_pton_with_prefix("[::1]:4444", (struct sockaddr *)&sa, &prefix));
+    TEST(prefix == 128);
+    TEST(0 == sock_pton_with_prefix("[10.10.250.22/16]:1234",
+                                    (struct sockaddr *)&sa, &prefix));
+    TEST(prefix == 16);
+    TEST(-2 == sock_pton_with_prefix("[10.10.250.22/-1]:1234",
+                                     (struct sockaddr *)&sa, &prefix));
 
     PD_SOCKET_CLEANUP();
 
