@@ -139,6 +139,12 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
 #endif // PCP_USE_IPV6_SOCKET
     // here, so that servers found by autodiscovery join as well; a client
     // that is not on port 5350 also listens there
+    if (s->announce_listening &&
+        (!IN6_ARE_ADDR_EQUAL(&s->announce_src_ip,
+                             (const struct in6_addr *)s->src_ip) ||
+         s->announce_scope_id != s->pcp_scope_id)) {
+        pcp_socket_close_announce(s);
+    }
     if (pcp_socket_join_announce_groups(
             s->ctx, (const struct in6_addr *)s->src_ip, s->pcp_scope_id) == 0) {
         pcp_socket_listen_announce(s);
