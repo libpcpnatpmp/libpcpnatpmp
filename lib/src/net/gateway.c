@@ -246,7 +246,30 @@ int getgateways(struct sockaddr_in6 **gws) {
             if (nlMsg->nlmsg_seq != msgSeq) {
                 continue;
             }
+            if (nlMsg->nlmsg_flags & NLM_F_DUMP_INTR) {
+                PCP_LOG(PCP_LOGLVL_DEBUG, "%s",
+                        "Routing table changed during netlink dump");
+                ret = PCP_ERR_RECV_FAILED;
+                goto fail;
+            }
             if (nlMsg->nlmsg_type == NLMSG_DONE) {
+                size_t payload_len = NLMSG_PAYLOAD(nlMsg, 0);
+                int status = 0;
+                if (payload_len != 0) {
+                    if (payload_len < sizeof(status)) {
+                        PCP_LOG(PCP_LOGLVL_DEBUG, "%s",
+                                "Invalid netlink dump completion");
+                        ret = PCP_ERR_RECV_FAILED;
+                        goto fail;
+                    }
+                    memcpy(&status, NLMSG_DATA(nlMsg), sizeof(status));
+                }
+                if (status != 0) {
+                    PCP_LOG(PCP_LOGLVL_DEBUG,
+                            "Netlink dump completion error: %d", status);
+                    ret = PCP_ERR_RECV_FAILED;
+                    goto fail;
+                }
                 done = 1;
                 break;
             }
