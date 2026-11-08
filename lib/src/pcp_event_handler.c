@@ -77,6 +77,9 @@
        MIN(MAX(rtprev, PCP_RETX_IRT), PCP_RETX_MRT)) >>                        \
       13))
 
+// how long a client with an announce listener may sleep between pcp_pulse()s
+#define PCP_ANNOUNCE_POLL_S 1
+
 static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg);
 static pcp_flow_event_e fhndl_resend(pcp_flow_t *f, pcp_recv_msg_t *msg);
 static pcp_flow_event_e fhndl_send_renew(pcp_flow_t *f, pcp_recv_msg_t *msg);
@@ -393,7 +396,25 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg) {
                                    sizeof(msg->pcp_msg_buffer), MSG_DONTWAIT,
                                    (struct sockaddr *)&msg->rcvd_from_addr,
                                    &src_len, &msg->rcvd_to_addr)) < 0) {
-        return ret;
+#ifdef PCP_ANNOUNCE_LISTENER
+        size_t i;
+
+        for (i = 0; ret < 0 && i < ctx->pcp_db.pcp_servers_length; i++) {
+            pcp_server_t *s = ctx->pcp_db.pcp_servers + i;
+
+            if (s->announce_listening) {
+                src_len = (socklen_t)sizeof(msg->rcvd_from_addr);
+                ret = pcp_socket_recvfrom_sock(
+                    ctx, s->announce_socket, msg->pcp_msg_buffer,
+                    sizeof(msg->pcp_msg_buffer), MSG_DONTWAIT,
+                    (struct sockaddr *)&msg->rcvd_from_addr, &src_len,
+                    &msg->rcvd_to_addr);
+            }
+        }
+#endif
+        if (ret < 0) {
+            return ret;
+        }
     }
 
     if (ret > INT32_MAX) {
@@ -1459,6 +1480,25 @@ process_timeouts : {
     struct hserver_iter_data param = {next_timeout, pcpe_timeout};
     pcp_db_foreach_server(ctx, hserver_iter, &param);
 }
+
+#ifdef PCP_ANNOUNCE_LISTENER
+    {
+        // a caller selects on pcp_get_socket() only, which is not told of an
+        // announcement to the server's own socket: have it come back for them
+        size_t i;
+
+        for (i = 0; i < ctx->pcp_db.pcp_servers_length; i++) {
+            if (ctx->pcp_db.pcp_servers[i].announce_listening) {
+                if (next_timeout->tv_sec >= PCP_ANNOUNCE_POLL_S ||
+                    (next_timeout->tv_sec == 0 && next_timeout->tv_usec == 0)) {
+                    next_timeout->tv_sec = PCP_ANNOUNCE_POLL_S;
+                    next_timeout->tv_usec = 0;
+                }
+                break;
+            }
+        }
+    }
+#endif
 
     PCP_LOG_END(PCP_LOGLVL_DEBUG);
     return (next_timeout->tv_sec * 1000) + (next_timeout->tv_usec / 1000);

@@ -33,6 +33,7 @@
 
 #include "pcp_client_db.h"
 #include "pcp_logger.h"
+#include "pcp_socket.h"
 #include "pcp_utils.h"
 #include <assert.h>
 #include <errno.h>
@@ -439,6 +440,7 @@ void pcp_db_free_pcp_servers(pcp_ctx_t *ctx) {
         if ((state != pss_unitialized) && (state != pss_allocated)) {
             run_server_state_machine(s, pcpe_terminate);
         }
+        pcp_socket_close_announce(s);
     }
     free(ctx->pcp_db.pcp_servers);
     ctx->pcp_db.pcp_servers = NULL;
