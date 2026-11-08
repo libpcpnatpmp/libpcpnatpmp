@@ -94,6 +94,11 @@ set (TEST_ERROR_LIFETIME_SOURCES
     ${TEST_PCP_SERVER_HELPER_SOURCES}
 )
 add_executable (test_error_lifetime ${TEST_ERROR_LIFETIME_SOURCES})
+set (TEST_SHORT_ERROR_WAIT_SOURCES
+    test_short_error_wait.c
+    ${TEST_PCP_SERVER_HELPER_SOURCES}
+)
+add_executable (test_short_error_wait ${TEST_SHORT_ERROR_WAIT_SOURCES})
 set (TEST_SERVER_RESTART_SOURCES
     test_server_restart.c
     ${TEST_PCP_SERVER_HELPER_SOURCES}
@@ -122,6 +127,7 @@ target_link_libraries (test_pcp_server pcpnatpmp)
 target_link_libraries (test_ping_gws pcpnatpmp)
 target_link_libraries (test_server_reping pcpnatpmp)
 target_link_libraries (test_error_lifetime pcpnatpmp)
+target_link_libraries (test_short_error_wait pcpnatpmp)
 target_link_libraries (test_server_restart pcpnatpmp Threads::Threads)
 target_link_libraries (test_sock_ntop pcpnatpmp)
 target_link_libraries (test_version_negotiation pcpnatpmp)
@@ -153,6 +159,7 @@ register_pcp_test (test_pcp_server)
 register_pcp_test (test_ping_gws)
 register_pcp_test (test_server_reping)
 register_pcp_test (test_error_lifetime)
+register_pcp_test (test_short_error_wait)
 register_pcp_test (test_server_restart)
 register_pcp_test (test_sock_ntop)
 register_pcp_test (test_version_negotiation)

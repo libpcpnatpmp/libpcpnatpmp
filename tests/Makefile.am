@@ -20,7 +20,8 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_logger \
                  test_pcp_msg \
                  test_server_reping \
-                 test_error_lifetime
+                 test_error_lifetime \
+                 test_short_error_wait
 
 noinst_HEADERS = test_macro.h test_pcp_server_helper.h test_process_helper.h
 
@@ -112,3 +113,7 @@ test_server_reping_LDFLAGS = -static
 test_error_lifetime_SOURCES = test_error_lifetime.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_error_lifetime_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_error_lifetime_LDFLAGS = -static
+
+test_short_error_wait_SOURCES = test_short_error_wait.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_short_error_wait_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_short_error_wait_LDFLAGS = -static
