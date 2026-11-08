@@ -53,7 +53,7 @@ jobs:
             c_compiler: cl
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
@@ -83,5 +83,4 @@ jobs:
     - name: Install
       # Validate CMake install rules.
       run: cmake --install ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} --prefix ${{ github.workspace }}/install
-
 
