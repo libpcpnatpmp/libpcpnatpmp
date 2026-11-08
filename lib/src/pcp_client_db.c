@@ -107,6 +107,12 @@ void pcp_flow_filters_resend(pcp_flow_t *f) {
     }
 }
 
+void pcp_flow_filters_server_restarted(pcp_flow_t *f) {
+    pcp_flow_filters_resend(f);
+    f->filter_try_total = 0;
+    f->filter_server_limit = 0;
+}
+
 uint16_t pcp_flow_filters_accepted(const pcp_flow_t *f) {
     uint16_t i, n = 0;
 
@@ -132,6 +138,32 @@ int pcp_flow_filters_in_request(const pcp_flow_t *f) {
     return 0;
 }
 
+/* the request was refused or not answered: what it carried is still to send */
+static void filters_request_lost(pcp_flow_t *f) {
+    uint16_t i;
+
+    f->filter_reset_sent = 0;
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            f->filters[i].state = PCP_FILTER_PENDING;
+        }
+    }
+}
+
+int pcp_flow_filters_refused(pcp_flow_t *f) {
+    uint16_t held = f->filter_reset ? 0 : pcp_flow_filters_accepted(f);
+    uint16_t next = f->filter_last_total ? f->filter_last_total - 1 : 0;
+
+    filters_request_lost(f);
+    /* no new filter to leave out, or the mapping would end up with none: a
+     * mapping without FILTER accepts traffic from every remote host */
+    if (next < held || next == 0) {
+        return 0;
+    }
+    f->filter_try_total = next;
+    return 1;
+}
+
 int pcp_flow_filters_confirmed(pcp_flow_t *f) {
     uint16_t i;
     int confirmed = 0;
@@ -148,6 +180,17 @@ int pcp_flow_filters_confirmed(pcp_flow_t *f) {
         if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
             f->filters[i].state = PCP_FILTER_CONFIRMED;
             confirmed = 1;
+        }
+    }
+    /* accepted after a refusal of one more: that is the server's limit, and
+     * the filters over it are not sent */
+    if (f->filter_try_total &&
+        pcp_flow_filters_accepted(f) >= f->filter_try_total) {
+        f->filter_server_limit = f->filter_try_total;
+        for (i = 0; i < f->filter_count; i++) {
+            if (f->filters[i].state == PCP_FILTER_PENDING) {
+                f->filters[i].state = PCP_FILTER_REFUSED;
+            }
         }
     }
     return confirmed;

@@ -194,6 +194,27 @@ int main(void) {
         f->recv_lifetime = now.tv_sec + 30;
         fhndl_shortlifeerror(f, &msg);
         TEST(f->filters[0].state == PCP_FILTER_PENDING);
+
+        // EXCESSIVE_REMOTE_PEERS for a request with two filters: the next
+        // request goes out at once, with one
+        fip.sin_port = htons(5555);
+        TEST(pcp_flow_set_filter_opt(f, (struct sockaddr *)&fip, 32) ==
+             PCP_ERR_SUCCESS);
+        f->filters[0].state = PCP_FILTER_IN_REQUEST;
+        f->filters[1].state = PCP_FILTER_IN_REQUEST;
+        f->filter_last_total = 2;
+        msg.recv_result = PCP_RES_EXCESSIVE_REMOTE_PEERS;
+        TEST(fhndl_shortlifeerror(f, &msg) == fev_send);
+        TEST(f->filter_try_total == 1);
+        TEST(f->filters[0].state == PCP_FILTER_PENDING);
+        TEST(f->filters[1].state == PCP_FILTER_PENDING);
+
+        // refused with one filter: the mapping is not created without any,
+        // so the client waits as after any short error
+        f->filters[0].state = PCP_FILTER_IN_REQUEST;
+        f->filter_last_total = 1;
+        TEST(fhndl_shortlifeerror(f, &msg) == fev_none);
+        TEST(f->filter_try_total == 1);
     }
 
     pcp_terminate(ctx, 1);

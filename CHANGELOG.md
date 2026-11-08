@@ -9,6 +9,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 ### Added
 
 - A flow keeps several FILTER options (RFC 6887 section 13.3), by default up to `PCP_MAX_FILTER_OPTIONS` (500); `pcp_set_max_filter_opts()` changes the limit. A request carries the filters the server does not have yet, as many as fit, and the next requests carry the rest; a renewal carries none, and all of them go out again when the server restarts or the mapping is lost. `pcp_flow_clear_filter_opts()` removes them, and `pcp_flow_set_filter_mode()` chooses between adding filters (`PCP_FILTER_MODE_MULTI`) and one filter that each call replaces (`PCP_FILTER_MODE_ONE`).
+- A server that answers `EXCESSIVE_REMOTE_PEERS` is sent one filter fewer, until it accepts; the filters over its limit are not sent. `pcp_flow_info_t` reports `filter_count`, `filter_accepted` and the learned `filter_server_limit` per server.
 - `pcp_flow_info_t.pcp_version`: the protocol version spoken with the flow's
   server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
 - `pcp_set_restart_delay()`: the longest random wait before re-sending after a server restart (default 5000 ms, 0 turns it off).
@@ -17,6 +18,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
 
 - `pcp_flow_set_filter_opt()` now adds a filter to the flow instead of replacing the one it had. A caller that calls it again to switch to another remote host keeps both allowed, unless it calls `pcp_flow_set_filter_mode(flow, PCP_FILTER_MODE_ONE)` first or `pcp_flow_clear_filter_opts()` before adding the new filter.
 - A filter with prefix length 0 ("no filter") removes the flow's filters instead of being stored as a filter.
+- `pcp_flow_info_t` has three new fields at its end, so its size changed.
 - `pcp_flow_set_filter_opt()` returns `int` instead of `void`: `PCP_ERR_SUCCESS`, or `PCP_ERR_BAD_ARGS`, `PCP_ERR_MAX_SIZE` or `PCP_ERR_NO_MEM`, in which case none of the flow's server flows is changed. Callers that ignore the result build unchanged. `pcpnatpmpc` exits with an error when the filter is refused.
 
 ### Fixed

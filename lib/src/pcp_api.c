@@ -962,6 +962,9 @@ pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count) {
         if (s) {
             info_iter->pcp_version = s->pcp_version;
         }
+        info_iter->filter_count = fiter->filter_count;
+        info_iter->filter_accepted = pcp_flow_filters_accepted(fiter);
+        info_iter->filter_server_limit = fiter->filter_server_limit;
 
         switch (fiter->state) {
         case pfs_wait_after_short_life_error:

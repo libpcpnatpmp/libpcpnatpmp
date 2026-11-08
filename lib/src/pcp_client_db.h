@@ -128,7 +128,7 @@ struct pcp_ctx_s {
 
 /* where a FILTER option of a flow is: not yet sent to the server (or to be
  * sent again), in the last request built, accepted by the server, or not sent
- * because it never fits in a request */
+ * because it is over the server's limit or never fits in a request */
 typedef enum {
     PCP_FILTER_PENDING = 0,
     PCP_FILTER_IN_REQUEST,
@@ -221,6 +221,16 @@ struct pcp_flow_s {
     uint8_t filter_sent;
     uint8_t filter_reset;
     uint8_t filter_reset_sent;
+    // A server accepts a limited number of FILTER options per mapping and
+    // answers a request that would go over it with EXCESSIVE_REMOTE_PEERS.
+    // filter_last_total: the FILTER options the mapping would have after the
+    // last request built.
+    // filter_try_total: the most the next request may bring it to (0: no
+    // limit), one less after each refusal. filter_server_limit: the most the
+    // server accepted when it had refused one more (0: not known).
+    uint16_t filter_last_total;
+    uint16_t filter_try_total;
+    uint16_t filter_server_limit;
 
     // THIRD_PARTY Option
     uint8_t third_party_option_present;
@@ -293,6 +303,14 @@ void pcp_flow_clear_msg_buf(pcp_flow_t *f);
 /* the server may not have the flow's filters any more (it restarted, or the
  * mapping failed or expired): send all of them again, also the refused ones */
 void pcp_flow_filters_resend(pcp_flow_t *f);
+
+/* the server restarted: send every filter again and learn its limit anew */
+void pcp_flow_filters_server_restarted(pcp_flow_t *f);
+
+/* the server answered EXCESSIVE_REMOTE_PEERS: the next request brings the
+ * mapping to one filter fewer than the refused one. Returns 1 if there is
+ * such a request to send */
+int pcp_flow_filters_refused(pcp_flow_t *f);
 
 /* how many of the flow's filters the server has accepted */
 uint16_t pcp_flow_filters_accepted(const pcp_flow_t *f);

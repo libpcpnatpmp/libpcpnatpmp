@@ -79,7 +79,7 @@ static void *add_filter_option(pcp_flow_t *f, void *cur,
  * renews a mapping carries FILTER: with lifetime 0 the server answers
  * MALFORMED_OPTION, and PEER does not take it. */
 static void *add_filter_options(pcp_flow_t *f, void *cur) {
-    uint16_t i, written = 0, pending = 0;
+    uint16_t i, written = 0, pending = 0, held, room;
     int full = 0;
     void *next;
 
@@ -91,8 +91,17 @@ static void *add_filter_options(pcp_flow_t *f, void *cur) {
             f->filters[i].state = PCP_FILTER_PENDING;
         }
     }
+    f->filter_last_total = 0;
     if (f->kd.operation != PCP_OPCODE_MAP || f->lifetime == 0) {
         return cur;
+    }
+
+    /* the filters the server has after this request, and how many new ones
+     * it may take (filter_try_total, after EXCESSIVE_REMOTE_PEERS) */
+    held = f->filter_reset ? 0 : pcp_flow_filters_accepted(f);
+    room = UINT16_MAX;
+    if (f->filter_try_total) {
+        room = f->filter_try_total > held ? f->filter_try_total - held : 0;
     }
 
     if (f->filter_reset) {
@@ -113,6 +122,9 @@ static void *add_filter_options(pcp_flow_t *f, void *cur) {
             continue;
         }
         pending++;
+        if (written >= room) {
+            continue; /* over the server's limit */
+        }
         next = full ? NULL : add_filter_option(f, cur, &f->filters[i]);
         if (next == NULL) {
             full = 1; /* no room left in the message, only counting */
@@ -123,10 +135,13 @@ static void *add_filter_options(pcp_flow_t *f, void *cur) {
         f->filter_sent = 1;
         written++;
     }
+    f->filter_last_total = held + written;
     if (written < pending) {
         /* a filter that cannot go in any request (the message is full of
-         * other options) is not sent until the filters are sent again */
-        int never = written == 0 && full;
+         * other options, or the server's known limit is reached) is not
+         * sent until the filters are sent again */
+        int never = (written == 0 && full) ||
+                    (f->filter_server_limit && written >= room);
         pcp_loglvl_e level = never ? PCP_LOGLVL_WARN : PCP_LOGLVL_DEBUG;
 
         PCP_LOG(level, "%u of %u pending FILTER options in the request%s",

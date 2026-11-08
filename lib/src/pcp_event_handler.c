@@ -599,6 +599,21 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     f->recv_result = msg->recv_result;
 
     gettimeofday(&f->timeout, NULL);
+
+    /* EXCESSIVE_REMOTE_PEERS: more FILTER options than the server accepts on
+     * a mapping. The request changed nothing, so send at once one with one
+     * filter fewer, until the server accepts (RFC 6887 section 13.3). The
+     * error's wait is for sending the same request again */
+    if (msg->recv_result == PCP_RES_EXCESSIVE_REMOTE_PEERS &&
+        pcp_flow_filters_refused(f)) {
+        PCP_LOG(PCP_LOGLVL_INFO,
+                "server refused %u FILTER options on the mapping, trying %u",
+                (unsigned)f->filter_last_total, (unsigned)f->filter_try_total);
+        /* straight on to the next request: the app is told the outcome,
+         * not each refusal */
+        return fev_send;
+    }
+
     f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
 
     /* the server's mapping ends before the next try: that request creates
@@ -762,9 +777,12 @@ static pcp_flow_state_e handle_flow_event(pcp_flow_t *f, pcp_flow_event_e ev,
 
         /* the server may have lost the mapping and its filters: it
          * restarted, the renewal failed, or the flow failed */
-        if (ev == fev_server_restarted || next_state == pfs_failed ||
-            (ev == fev_failed && (cur_state == pfs_wait_for_lifetime_renew ||
-                                  cur_state == pfs_send_renew))) {
+        if (ev == fev_server_restarted) {
+            pcp_flow_filters_server_restarted(f);
+        } else if (next_state == pfs_failed ||
+                   (ev == fev_failed &&
+                    (cur_state == pfs_wait_for_lifetime_renew ||
+                     cur_state == pfs_send_renew))) {
             pcp_flow_filters_resend(f);
         }
 

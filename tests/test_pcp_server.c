@@ -201,9 +201,10 @@ static int count_string(const char *haystack, const char *needle) {
 static int expected_filter_options = -1;
 /* called with the flow after the success reply, then reset to NULL */
 static void (*check_after_success)(pcp_flow_t *flow) = NULL;
-/* for the next case: the requests the server answers before it stops; then
- * reset */
+/* for the next case: the requests the server answers before it stops, and
+ * the most FILTER options it accepts in one (0: no limit); then reset */
 static uint8_t server_requests = 1;
+static uint8_t server_max_filters = 0;
 
 static server_run_result_t run_server_main(int argc, char **argv) {
     server_run_result_t result;
@@ -423,7 +424,9 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
     server_config.server_port = server_port;
     server_config.server_address = "0.0.0.0";
     server_config.server_info.end_after_recv = server_requests;
+    server_config.server_info.max_filters = server_max_filters;
     server_requests = 1;
+    server_max_filters = 0;
     copy_log_file_path(&server_config.server_info, log_path);
     test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
     test_sleep_ms(100);
@@ -545,11 +548,31 @@ static void add_filters(pcp_flow_t *flow, int n) {
     }
 }
 
+static void setup_five_filters(pcp_flow_t *flow) { add_filters(flow, 5); }
+
 static void setup_fifty_filters(pcp_flow_t *flow) { add_filters(flow, 50); }
 
+/* the limit the server showed, through the API */
+static void check_filters_limited(pcp_flow_t *flow) {
+    size_t n = 0;
+    pcp_flow_info_t *info = pcp_flow_get_info(flow, &n);
+
+    TEST(info != NULL && n == 1);
+    TEST(info[0].filter_count == 5);
+    TEST(info[0].filter_accepted == 3);
+    TEST(info[0].filter_server_limit == 3);
+    free(info);
+}
+
 static void check_filters_all_accepted(pcp_flow_t *flow) {
-    TEST(flow->filter_count == 50);
-    TEST(pcp_flow_filters_accepted(flow) == 50);
+    size_t n = 0;
+    pcp_flow_info_t *info = pcp_flow_get_info(flow, &n);
+
+    TEST(info != NULL && n == 1);
+    TEST(info[0].filter_count == 50);
+    TEST(info[0].filter_accepted == 50);
+    TEST(info[0].filter_server_limit == 0);
+    free(info);
 }
 
 static void test_log_file_cases(void) {
@@ -621,6 +644,9 @@ static void test_log_file_cases(void) {
                                                  "PREFIX: 128",
                                                  "9.9.9.9",
                                                  NULL};
+    static const char *const filters_limited[] = {
+        "PCP protocol VERSION 2.", "FILTER IP: ::ffff:10.5.0.4",
+        "FILTER IP: ::ffff:10.5.0.3", "FILTER IP: ::ffff:10.5.0.2", NULL};
     static const char *const filters_many[] = {
         "PCP protocol VERSION 2.", "FILTER IP: ::ffff:10.5.0.0",
         "FILTER IP: ::ffff:10.5.0.49", NULL};
@@ -674,6 +700,15 @@ static void test_log_file_cases(void) {
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, NULL,
                          setup_filter_replace, filter_replace);
+    /* a server that accepts 3: requests with 5 and 4 are refused, the one
+     * with 3 is accepted */
+    expected_filter_options = 5 + 4 + 3;
+    server_requests = 3;
+    server_max_filters = 3;
+    check_after_success = check_filters_limited;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         setup_five_filters, filters_limited);
     /* more than fit in one request: the rest in the next one */
     expected_filter_options = 50;
     server_requests = 2;

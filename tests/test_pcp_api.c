@@ -410,7 +410,7 @@ int main(void) {
         TEST(count_options(f3, PCP_OPTION_PREF_FAIL, NULL) == 1);
         TEST(count_options(f3, PCP_OPTION_3RD_PARTY, NULL) == 1);
         // the server restarted: all of them go out again
-        pcp_flow_filters_resend(f3);
+        pcp_flow_filters_server_restarted(f3);
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == n1);
         TEST(pcp_flow_filters_confirmed(f3));
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == 60 - n1);
@@ -504,6 +504,52 @@ int main(void) {
              PCP_ERR_SUCCESS);
         TEST(f4->filter_count == 10);
         TEST(f4->next_child->filter_count == 10);
+    }
+
+    // EXCESSIVE_REMOTE_PEERS: one filter fewer until the server accepts; that
+    // is its limit, and the filters over it are not sent
+    {
+        pcp_flow_t *f5;
+        pcp_flow_info_t *info;
+        size_t info_count = 0;
+        int i;
+        char addr[32];
+
+        TEST(pcp_set_max_filter_opts(ctx, PCP_MAX_FILTER_OPTIONS) ==
+             PCP_ERR_SUCCESS);
+        TEST((f5 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1238"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        for (i = 0; i < 5; i++) {
+            snprintf(addr, sizeof(addr), "10.3.0.%d:80", i);
+            TEST(pcp_flow_set_filter_opt(f5, Sock_pton(addr), 32) ==
+                 PCP_ERR_SUCCESS);
+        }
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 5);
+        TEST(pcp_flow_filters_refused(f5));
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 4);
+        TEST(pcp_flow_filters_refused(f5));
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 3);
+        TEST(f5->filter_server_limit == 0);
+        TEST(pcp_flow_filters_confirmed(f5));
+        TEST(f5->filter_server_limit == 3);
+        TEST(pcp_flow_filters_accepted(f5) == 3);
+        TEST(!pcp_flow_filters_pending(f5));
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 0);
+        info = pcp_flow_get_info(f5, &info_count);
+        TEST(info != NULL && info_count >= 1);
+        TEST(info[0].filter_count == 5);
+        TEST(info[0].filter_accepted == 3);
+        TEST(info[0].filter_server_limit == 3);
+        free(info);
+        // a filter added later is over the known limit: not sent
+        TEST(pcp_flow_set_filter_opt(f5, Sock_pton("10.3.0.9:80"), 32) ==
+             PCP_ERR_SUCCESS);
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 0);
+        TEST(!pcp_flow_filters_pending(f5));
+        // after a restart the server's limit is learned again
+        pcp_flow_filters_server_restarted(f5);
+        TEST(f5->filter_server_limit == 0);
+        TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 6);
     }
 
     // at the largest limit the count of filters cannot wrap: the next

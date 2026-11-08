@@ -96,12 +96,14 @@
 typedef struct options_occur {
     int third_party_occur;
     int pfailure_occur;
+    int filter_occur;
 } options_occur_t;
 
 static void reset_option_occur(options_occur_t *opt_occ) {
 
     opt_occ->third_party_occur = 0;
     opt_occ->pfailure_occur = 0;
+    opt_occ->filter_occur = 0;
 }
 
 // get sockaddr, IPv4 or IPv6:
@@ -334,6 +336,7 @@ static int print_PCP_options(void *pcp_buf, int *remainingSize,
             DUPPRINT(log_file, "Unsupported OPTION for given OPCODE.\n");
             pcp_result_code = PCP_RES_MALFORMED_REQUEST;
         }
+        opt_occ->filter_occur++;
         opt_filter = (pcp_filter_option_t *)(pcp_buf_helper + processed);
         DUPPRINT(log_file, "\n");
         DUPPRINT(log_file, "OPTION: \t Filter \n");
@@ -973,6 +976,16 @@ int pcp_test_server_pulse(pcp_test_server_t *server, int timeout_ms) {
         pcp_result_code = printPCPreq(buf, numbytes, &opt_occurence,
                                       server->server_info.server_version,
                                       server->server_info.log_file);
+        /* RFC 6887 section 13.3: more remote peers (FILTER options) than
+         * the server supports on a mapping */
+        if (pcp_result_code == PCP_RES_SUCCESS &&
+            server->server_info.max_filters != 0 &&
+            opt_occurence.filter_occur > server->server_info.max_filters) {
+            printf("PCP server: %d FILTER options, at most %d: "
+                   "EXCESSIVE_REMOTE_PEERS\n",
+                   opt_occurence.filter_occur, server->server_info.max_filters);
+            pcp_result_code = PCP_RES_EXCESSIVE_REMOTE_PEERS;
+        }
 
         create_response(buf,
                         (server->server_info.default_result_code == 255)

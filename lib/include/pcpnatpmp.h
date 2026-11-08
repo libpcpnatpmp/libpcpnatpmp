@@ -288,6 +288,11 @@ int pcp_flow_set_filter_mode(pcp_flow_t *f, pcp_filter_mode_e mode);
  * renewal or the flow failed, or it expired while the client waited after an
  * error). A request that deletes the mapping (lifetime 0) and a PEER request
  * carry no FILTER option (RFC 6887 sections 13.3, 7.3).
+ * A server accepts a limited number of FILTER options per mapping (RFC 6887
+ * section 13.3 counts each as a permitted "remote peer"), and answers a
+ * request that would go over it with EXCESSIVE_REMOTE_PEERS; the flow then
+ * sends one filter fewer, until the server accepts. The filters over that
+ * limit are not sent; pcp_flow_get_info() reports the limit.
  */
 int pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                             uint8_t filter_prefix);
@@ -352,6 +357,14 @@ typedef struct pcp_flow_info {
     uint8_t protocol;
     uint8_t learned_dscp; // relevant only for flow created by pcp_learn_dscp
     uint8_t pcp_version; // version spoken with this flow's server; 0 is NAT-PMP
+    // FILTER options (see pcp_flow_set_filter_opt()): the flow's filters,
+    // how many of them this server has accepted, and the most FILTER options
+    // it accepts on the mapping, learned from its EXCESSIVE_REMOTE_PEERS
+    // answers (0: not known). Filters over that limit are not sent until the
+    // server restarts or a filter is removed.
+    uint16_t filter_count;
+    uint16_t filter_accepted;
+    uint16_t filter_server_limit;
 } pcp_flow_info_t;
 
 // Allocates info_buf by malloc, has to be freed by client when no longer
