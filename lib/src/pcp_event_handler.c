@@ -78,6 +78,7 @@ static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
                                                pcp_recv_msg_t *msg);
 static pcp_flow_event_e fhndl_clear_timeouts(pcp_flow_t *f,
                                              pcp_recv_msg_t *msg);
+static pcp_flow_event_e fhndl_failed(pcp_flow_t *f, pcp_recv_msg_t *msg);
 static pcp_flow_event_e fhndl_waitresp(pcp_flow_t *f, pcp_recv_msg_t *msg);
 
 static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s);
@@ -111,6 +112,8 @@ static const char *dbg_get_func_name(void *f) {
         return "fhndl_received_success";
     } else if (f == fhndl_clear_timeouts) {
         return "fhndl_clear_timeouts";
+    } else if (f == fhndl_failed) {
+        return "fhndl_failed";
     } else if (f == fhndl_waitresp) {
         return "fhndl_waitresp";
     } else if (f == handle_wait_io_receive_msg) {
@@ -258,7 +261,7 @@ pcp_flow_state_trans_t flow_transitions[] = {
     {pfs_wait_for_lifetime_renew, pfs_wait_for_lifetime_renew,
      fhndl_received_success},
     {pfs_any, pfs_wait_for_server_init, fhndl_clear_timeouts},
-    {pfs_any, pfs_failed, fhndl_clear_timeouts},
+    {pfs_any, pfs_failed, fhndl_failed},
 };
 
 #define FLOW_TRANS_COUNT (sizeof(flow_transitions) / sizeof(*flow_transitions))
@@ -549,6 +552,19 @@ static pcp_flow_event_e fhndl_clear_timeouts(pcp_flow_t *f,
     f->timeout.tv_usec = 0;
 
     return fev_none;
+}
+
+static pcp_flow_event_e fhndl_failed(pcp_flow_t *f, pcp_recv_msg_t *msg) {
+    // an error response's lifetime is how long the server will keep refusing
+    if (msg && msg->recv_result != PCP_RES_SUCCESS) {
+        if (msg->recv_lifetime > (time_t)LONG_MAX - msg->received_time) {
+            f->recv_lifetime = LONG_MAX;
+        } else {
+            f->recv_lifetime = msg->received_time + msg->recv_lifetime;
+        }
+    }
+
+    return fhndl_clear_timeouts(f, msg);
 }
 
 static pcp_flow_event_e fhndl_waitresp(pcp_flow_t *f,
