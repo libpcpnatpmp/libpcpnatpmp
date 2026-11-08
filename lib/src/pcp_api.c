@@ -92,6 +92,11 @@ int pcp_add_server(pcp_ctx_t *ctx, struct sockaddr *pcp_server,
 
 void pcp_set_restart_delay(pcp_ctx_t *ctx, uint32_t max_ms) {
     if (ctx) {
+        if (max_ms > 5000) {
+            PCP_LOG(PCP_LOGLVL_WARN, "%s",
+                    "Restart delay exceeds 5000 ms; limiting it to 5000 ms");
+            max_ms = 5000;
+        }
         ctx->restart_delay_max_ms = max_ms;
     }
 }

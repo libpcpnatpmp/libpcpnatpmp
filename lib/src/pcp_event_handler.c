@@ -462,6 +462,11 @@ static int count_waiting_iter(pcp_flow_t *f, void *data) {
 // returns 1 if the flow may not send now; its timeout is then set to the end
 // of the current window
 static int pace_defer(pcp_flow_t *f, int first_transmission) {
+    pcp_server_t *server = get_pcp_server(f->ctx, f->pcp_server_indx);
+    if (server && server->restart_pending) {
+        f->timeout = server->restart_resend_at;
+        return 1;
+    }
 #if PCP_PACE_BURST > 0
     pcp_ctx_t *ctx = f->ctx;
     struct timeval now;
@@ -853,6 +858,18 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
 static int check_flow_timeout(pcp_flow_t *f, void *timeout) {
     struct timeval *tout = timeout;
     struct timeval ctv;
+    pcp_server_t *server = get_pcp_server(f->ctx, f->pcp_server_indx);
+
+    if (server && server->restart_pending) {
+        struct timeval remaining;
+        gettimeofday(&ctv, NULL);
+        timeval_subtract(&remaining, &server->restart_resend_at, &ctv);
+        if ((tout->tv_sec == 0 && tout->tv_usec == 0) ||
+            timeval_comp(&remaining, tout) < 0) {
+            *tout = remaining;
+        }
+        return 0;
+    }
 
     if ((f->timeout.tv_sec == 0) && (f->timeout.tv_usec == 0)) {
         return 0;
@@ -1144,9 +1161,9 @@ static uint32_t random_below(const pcp_ctx_t *ctx, uint32_t bound) {
 static void resend_after_restart(pcp_server_t *s) {
     struct flow_iterator_data d = {s, fev_server_restarted};
 
+    s->restart_pending = 0;
     pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);
     s->restart_flow_msg = NULL;
-    s->restart_pending = 0;
 }
 
 /*
@@ -1157,7 +1174,7 @@ static void resend_after_restart(pcp_server_t *s) {
  * sent again (see fhndl_send()), so keep restart_flow_msg until then.
  */
 static pcp_server_state_e handle_server_restart(pcp_server_t *s) {
-    uint32_t max_ms = s->ctx->restart_delay_max_ms;
+    uint32_t max_ms = MIN(s->ctx->restart_delay_max_ms, 5000u);
     struct timeval now;
 
     gettimeofday(&now, NULL);

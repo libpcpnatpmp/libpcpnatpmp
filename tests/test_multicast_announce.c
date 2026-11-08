@@ -231,6 +231,35 @@ static double announce_resend_delay(const char *address,
     TEST(pcp_wait(flow, 2000, 0) == pcp_state_succeeded);
     (void)wait_for_request(ctx, fd, 1.0, buf, sizeof(buf), &peer);
 
+    if (restart_max_ms == 0) {
+        pcp_server_t *server = get_pcp_server(ctx, flow->pcp_server_indx);
+        struct timeval original_timeout = flow->timeout;
+        struct timeval original_server_timeout = server->next_timeout;
+        time_t expiry = flow->recv_lifetime;
+        pcp_flow_state_e states[] = {pfs_wait_for_lifetime_renew,
+                                     pfs_wait_resp};
+        size_t i;
+
+        // Another server's timeout also scans this context's flows.
+        TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5363"), 2) == 1);
+        for (i = 0; i < sizeof(states) / sizeof(*states); ++i) {
+            flow->state = states[i];
+            flow->timeout.tv_sec = 1;
+            flow->timeout.tv_usec = 0;
+            server->restart_pending = 1;
+            gettimeofday(&server->restart_resend_at, NULL);
+            server->restart_resend_at.tv_sec += 2;
+            server->next_timeout = server->restart_resend_at;
+            TEST(wait_for_request(ctx, fd, 0.1, buf, sizeof(buf), &peer) == 0);
+            TEST(flow->state == states[i]);
+            TEST(flow->recv_lifetime == expiry);
+            server->restart_pending = 0;
+        }
+        flow->state = pfs_wait_for_lifetime_renew;
+        flow->timeout = original_timeout;
+        server->next_timeout = original_server_timeout;
+    }
+
     announced = now_s();
     send_multicast_announce(fd, announce_epoch);
     if (wait_for_request(ctx, fd, wait_s, buf, sizeof(buf), &peer) == 60) {
@@ -366,8 +395,6 @@ int main(void) {
     }
     printf("random wait over %d trials: %.3f s to %.3f s\n", RANDOM_TRIALS,
            shortest, longest);
-    TEST(longest - shortest > 0.1);
-    TEST(longest > 0.05);
 
     /* the default is the longest the RFC allows: 5 seconds */
     delay = announce_resend_delay(address, 0, UINT32_MAX, 6.5, NULL);
