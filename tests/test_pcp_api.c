@@ -185,9 +185,9 @@ int main(void) {
         pcp_terminate(ctx, 1);
     }
 
-    // a flow to a NAT-PMP server keeps the server's nonce, under which the
+    // a flow to a nonce-free server keeps the server's nonce, under which the
     // answers, which carry none, are looked up
-    {
+    for (int version = 0; version < 2; ++version) {
         uint32_t nonce_words_be[3] = {htonl(0x00112233), htonl(0x44556677),
                                       htonl(0x8899aabb)};
         pcp_server_t *natpmp;
@@ -196,7 +196,7 @@ int main(void) {
         TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
         TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5351"), 2) == 1);
         natpmp = get_pcp_server(ctx, 1);
-        natpmp->pcp_version = 0;
+        natpmp->pcp_version = version;
         TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                                 IPPROTO_TCP, 100, NULL)) != NULL);
         TEST(f1->next_child != NULL);
