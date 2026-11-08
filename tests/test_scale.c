@@ -63,6 +63,30 @@ static size_t sent_total, sent_map, sent_peer, sent_with_options;
 static size_t sent_max_len;
 static pcp_socket_vt_t counting_vt;
 static pid_t server_pid = -1;
+static unsigned char *renewal_received;
+static size_t renewal_count, renewal_flow_count;
+
+static ssize_t counting_recvfrom(PCP_SOCKET sock, void *buf, size_t len,
+                                 int flags, struct sockaddr *src,
+                                 socklen_t *addrlen, struct sockaddr_in6 *dst) {
+    ssize_t result = default_socket_vt.sock_recvfrom(sock, buf, len, flags, src,
+                                                     addrlen, dst);
+    const uint8_t *packet = buf;
+
+    if (renewal_received && result >= 60 && packet[0] == 2 &&
+        packet[3] == PCP_RES_SUCCESS && packet[4] == 0 && packet[5] == 0 &&
+        packet[6] == 2 && packet[7] == 0x59 &&
+        (packet[1] == (0x80 | PCP_OPCODE_MAP) ||
+         packet[1] == (0x80 | PCP_OPCODE_PEER))) {
+        unsigned port = ((unsigned)packet[40] << 8) | packet[41];
+        if (port >= 1024 && port - 1024 < renewal_flow_count &&
+            !renewal_received[port - 1024]) {
+            renewal_received[port - 1024] = 1;
+            ++renewal_count;
+        }
+    }
+    return result;
+}
 
 static void cleanup_server(void) {
     if (server_pid > 0) {
@@ -262,6 +286,7 @@ int main(int argc, char **argv) {
 
     counting_vt = default_socket_vt;
     counting_vt.sock_sendto = counting_sendto;
+    counting_vt.sock_recvfrom = counting_recvfrom;
     ctx = pcp_init(DISABLE_AUTODISCOVERY, &counting_vt);
     TEST(ctx != NULL);
     TEST(pcp_add_server(ctx, Sock_pton(SERVER_ADDR), 2) == 0);
@@ -320,6 +345,9 @@ int main(int argc, char **argv) {
     TEST(sent_peer >= n / 3);
 
     /* Make every renewal due together and check that one pulse is paced. */
+    renewal_flow_count = n;
+    renewal_received = calloc(n, sizeof(*renewal_received));
+    TEST(renewal_received != NULL);
     for (i = 0; i < n; ++i) {
         flows[i]->timeout.tv_sec = 1;
         flows[i]->timeout.tv_usec = 0;
@@ -337,23 +365,26 @@ int main(int argc, char **argv) {
         TEST(flows[i]->recv_lifetime > time(NULL));
     }
 
-    /* Finish the renewals before restarting the server. */
+    /* Confirm every mapping with a distinct lifetime before restarting.
+     * A renewal's retry timer can be half the remaining lifetime, longer
+     * than this test's deadline if its response was dropped. */
+    memset(renewal_received, 0, n * sizeof(*renewal_received));
+    renewal_count = 0;
+    for (i = 0; i < n; ++i) {
+        pcp_flow_set_lifetime(flows[i], 601);
+    }
     {
         double deadline = now_s() + PHASE_TIMEOUT_S;
-        size_t pending;
         do {
             struct timeval timeout = {0, 0};
             pcp_pulse(ctx, &timeout);
-            pending = 0;
-            for (i = 0; i < n; ++i) {
-                if (flows[i]->state == pfs_send_renew ||
-                    flows[i]->timeout.tv_sec < time(NULL) + 100) {
-                    ++pending;
-                }
-            }
-        } while (pending && now_s() < deadline);
-        TEST(pending == 0);
+        } while (renewal_count < n && now_s() < deadline);
+        fprintf(stderr, "renewals: %zu/%zu replies received\n", renewal_count,
+                n);
+        TEST(renewal_count == n);
     }
+    free(renewal_received);
+    renewal_received = NULL;
 
     /* The server restarts and its epoch starts again from zero. One
      * refreshed flow gets a reply with the lower epoch; the client must then
@@ -362,7 +393,7 @@ int main(int argc, char **argv) {
     sleep(1);
     server = start_server(0, delay_us);
     before = sent_total;
-    pcp_flow_set_lifetime(flows[0], 601);
+    pcp_flow_set_lifetime(flows[0], 602);
     succeeded_count = 0;
     memset(succeeded, 0, n * sizeof(*succeeded));
     t_restart = drive(ctx, n, PHASE_TIMEOUT_S);
@@ -373,6 +404,7 @@ int main(int argc, char **argv) {
             succeeded_count, n, t_restart, sent_total - before,
             drops0 < 0 ? -1 : drops1 - drops0);
     TEST(succeeded_count >= n);
+    TEST(get_pcp_server(ctx, 0)->epoch < 100);
     TEST(sent_total - before >= n);
 
     for (i = 0; i < n; i++) {
