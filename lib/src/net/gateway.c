@@ -112,57 +112,79 @@
 
 #ifdef USE_NETLINK
 
-#define BUFSIZE 8192
+/* Large enough for one route dump datagram; the kernel sends at most a page
+ * (or 32 KiB) per datagram, so a dump with many routes spans several reads. */
+#define BUFSIZE 32768
 
-static ssize_t readNlSock(int sockFd, char *bufPtr, unsigned seqNum,
-                          unsigned pId) {
-    struct nlmsghdr *nlHdr;
-    ssize_t readLen = 0, msgLen = 0;
+/* Add the gateway of one RTM_NEWROUTE message to *gws.
+ * Returns the new count, or PCP_ERR_NO_MEM. */
+static int add_route_gateway(struct nlmsghdr *nlMsg, struct sockaddr_in6 **gws,
+                             int count) {
+    struct rtmsg *rtMsg;
+    struct rtattr *rtAttr;
+    int rtLen;
+    unsigned int scope_id = 0;
+    struct in6_addr addr;
+    int found = 0;
+    struct sockaddr_in6 *tmp_gws;
 
-    do {
-        /* Receive response from the kernel */
-        readLen = recv(sockFd, bufPtr, BUFSIZE - msgLen, 0);
-        if (readLen == -1) {
-            char errmsg[128];
-            pcp_strerror(errno, errmsg, sizeof(errmsg));
-            PCP_LOG(PCP_LOGLVL_DEBUG, "SOCK READ: %s", errmsg);
-            return -1;
+    if (nlMsg->nlmsg_type != RTM_NEWROUTE ||
+        nlMsg->nlmsg_len < NLMSG_LENGTH(sizeof(struct rtmsg))) {
+        return count;
+    }
+    rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+
+    /* Skip routes that are not AF_INET(6) or not in the main table. */
+    if (((rtMsg->rtm_family != AF_INET) && (rtMsg->rtm_family != AF_INET6)) ||
+        (rtMsg->rtm_table != RT_TABLE_MAIN)) {
+        return count;
+    }
+
+    rtAttr = (struct rtattr *)RTM_RTA(rtMsg);
+    rtLen = RTM_PAYLOAD(nlMsg);
+    for (; RTA_OK(rtAttr, rtLen); rtAttr = RTA_NEXT(rtAttr, rtLen)) {
+        size_t rtaLen = RTA_PAYLOAD(rtAttr);
+        if (rtaLen > sizeof(struct in6_addr)) {
+            continue;
         }
-
-        nlHdr = (struct nlmsghdr *)bufPtr;
-
-        /* Check if the header is valid */
-        if ((NLMSG_OK(nlHdr, (unsigned)readLen) == 0) ||
-            (nlHdr->nlmsg_type == NLMSG_ERROR)) {
-            PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error in received packet");
-            return -1;
+        if (rtAttr->rta_type == RTA_OIF) {
+            memcpy(&scope_id, RTA_DATA(rtAttr), sizeof(unsigned int));
+        } else if (rtAttr->rta_type == RTA_GATEWAY) {
+            memset(&addr, 0, sizeof(struct in6_addr));
+            memcpy(&addr, RTA_DATA(rtAttr), rtaLen);
+            if (rtMsg->rtm_family == AF_INET) {
+                TO_IPV6MAPPED(&addr);
+            }
+            found = 1;
         }
+    }
+    if (!found) {
+        return count;
+    }
 
-        /* Check if the its the last message */
-        if (nlHdr->nlmsg_type == NLMSG_DONE) {
-            break;
-        } else {
-            /* Else move the pointer to buffer appropriately */
-            bufPtr += readLen;
-            msgLen += readLen;
-        }
-
-        /* Check if its a multi part message */
-        if ((nlHdr->nlmsg_flags & NLM_F_MULTI) == 0) {
-            /* return if its not */
-            break;
-        }
-    } while ((nlHdr->nlmsg_seq != seqNum) || (nlHdr->nlmsg_pid != pId));
-    return msgLen;
+    tmp_gws = (struct sockaddr_in6 *)realloc(*gws, sizeof(struct sockaddr_in6) *
+                                                       (count + 1));
+    if (!tmp_gws) {
+        PCP_LOG(PCP_LOGLVL_ERR, "%s", "Error allocating memory");
+        return PCP_ERR_NO_MEM;
+    }
+    *gws = tmp_gws;
+    memset(*gws + count, 0, sizeof(struct sockaddr_in6));
+    (*gws + count)->sin6_family = AF_INET6;
+    memcpy(&((*gws + count)->sin6_addr), &addr, sizeof(addr));
+    (*gws + count)->sin6_scope_id = scope_id;
+    SET_SA_LEN(*gws + count, sizeof(struct sockaddr_in6))
+    return count + 1;
 }
 
 int getgateways(struct sockaddr_in6 **gws) {
     struct nlmsghdr *nlMsg;
     char msgBuf[BUFSIZE];
-
-    int sock, msgSeq = 0;
+    const unsigned msgSeq = 1;
+    int sock;
     ssize_t len;
-    int ret;
+    int ret = 0;
+    int done = 0;
 
     if (!gws) {
         return PCP_ERR_BAD_ARGS;
@@ -175,23 +197,16 @@ int getgateways(struct sockaddr_in6 **gws) {
         return PCP_ERR_UNKNOWN;
     }
 
-    /* Initialize the buffer */
     memset(msgBuf, 0, BUFSIZE);
-
-    /* point the header and the msg structure pointers into the buffer */
     nlMsg = (struct nlmsghdr *)msgBuf;
 
-    /* Fill in the nlmsg header*/
-    nlMsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg)); // Length of message.
-    nlMsg->nlmsg_type =
-        RTM_GETROUTE; // Get the routes from kernel routing table.
+    /* Ask the kernel to dump its routing tables. */
+    nlMsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
+    nlMsg->nlmsg_type = RTM_GETROUTE;
+    nlMsg->nlmsg_flags = NLM_F_DUMP | NLM_F_REQUEST;
+    nlMsg->nlmsg_seq = msgSeq;
+    nlMsg->nlmsg_pid = 0;
 
-    nlMsg->nlmsg_flags =
-        NLM_F_DUMP | NLM_F_REQUEST; // The message is a request for dump.
-    nlMsg->nlmsg_seq = msgSeq++;    // Sequence of the message packet.
-    nlMsg->nlmsg_pid = getpid();    // PID of process sending the request.
-
-    /* Send the request */
     len = send(sock, nlMsg, nlMsg->nlmsg_len, 0);
     if (len == -1) {
         PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Write To Netlink Socket Failed...");
@@ -199,72 +214,60 @@ int getgateways(struct sockaddr_in6 **gws) {
         goto end;
     }
 
-    /* Read the response */
-    len = readNlSock(sock, msgBuf, msgSeq, getpid());
-    if (len < 0) {
-        PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Read From Netlink Socket Failed...");
-        ret = PCP_ERR_RECV_FAILED;
-        goto end;
-    }
-    /* Parse and print the response */
-    ret = 0;
+    /* The dump may span several datagrams. Read and parse them one at a
+     * time until NLMSG_DONE. */
+    while (!done) {
+        struct iovec iov = {msgBuf, sizeof(msgBuf)};
+        struct msghdr msg;
 
-    for (; NLMSG_OK(nlMsg, (unsigned)len); nlMsg = NLMSG_NEXT(nlMsg, len)) {
-        struct rtmsg *rtMsg;
-        struct rtattr *rtAttr;
-        int rtLen;
-        unsigned int scope_id = 0;
-        struct in6_addr addr;
-        int found = 0;
-        rtMsg = (struct rtmsg *)NLMSG_DATA(nlMsg);
+        memset(&msg, 0, sizeof(msg));
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
 
-        /* If the route is not for AF_INET(6) or does not belong to main
-           routing table then return. */
-        if (((rtMsg->rtm_family != AF_INET) &&
-             (rtMsg->rtm_family != AF_INET6)) ||
-            (rtMsg->rtm_table != RT_TABLE_MAIN)) {
-            continue;
-        }
-
-        /* get the rtattr field */
-        rtAttr = (struct rtattr *)RTM_RTA(rtMsg);
-        rtLen = RTM_PAYLOAD(nlMsg);
-        for (; RTA_OK(rtAttr, rtLen); rtAttr = RTA_NEXT(rtAttr, rtLen)) {
-            size_t rtaLen = RTA_PAYLOAD(rtAttr);
-            if (rtaLen > sizeof(struct in6_addr)) {
+        len = recvmsg(sock, &msg, 0);
+        if (len < 0) {
+            char errmsg[128];
+            if (errno == EINTR) {
                 continue;
             }
-            if (rtAttr->rta_type == RTA_OIF) {
-                memcpy(&scope_id, RTA_DATA(rtAttr), sizeof(unsigned int));
-            } else if (rtAttr->rta_type == RTA_GATEWAY) {
-                memset(&addr, 0, sizeof(struct in6_addr));
-                memcpy(&addr, RTA_DATA(rtAttr), rtaLen);
-                if (rtMsg->rtm_family == AF_INET) {
-                    TO_IPV6MAPPED(&addr);
-                }
-                found = 1;
+            pcp_strerror(errno, errmsg, sizeof(errmsg));
+            PCP_LOG(PCP_LOGLVL_DEBUG, "SOCK READ: %s", errmsg);
+            ret = PCP_ERR_RECV_FAILED;
+            goto fail;
+        }
+        if (len == 0 || (msg.msg_flags & MSG_TRUNC)) {
+            PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error in received packet");
+            ret = PCP_ERR_RECV_FAILED;
+            goto fail;
+        }
+
+        for (nlMsg = (struct nlmsghdr *)msgBuf; NLMSG_OK(nlMsg, (unsigned)len);
+             nlMsg = NLMSG_NEXT(nlMsg, len)) {
+            if (nlMsg->nlmsg_seq != msgSeq) {
+                continue;
+            }
+            if (nlMsg->nlmsg_type == NLMSG_DONE) {
+                done = 1;
+                break;
+            }
+            if (nlMsg->nlmsg_type == NLMSG_ERROR) {
+                PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Error in received packet");
+                ret = PCP_ERR_RECV_FAILED;
+                goto fail;
+            }
+            ret = add_route_gateway(nlMsg, gws, ret);
+            if (ret < 0) {
+                goto fail;
             }
         }
-        if (found) {
-            struct sockaddr_in6 *tmp_gws;
-            tmp_gws = (struct sockaddr_in6 *)realloc(
-                *gws, sizeof(struct sockaddr_in6) * (ret + 1));
-            if (!tmp_gws) {
-                PCP_LOG(PCP_LOGLVL_ERR, "%s", "Error allocating memory");
-                if (*gws) {
-                    free(*gws);
-                    *gws = NULL;
-                }
-                ret = PCP_ERR_NO_MEM;
-                goto end;
-            }
-            *gws = tmp_gws;
-            (*gws + ret)->sin6_family = AF_INET6;
-            memcpy(&((*gws + ret)->sin6_addr), &addr, sizeof(addr));
-            (*gws + ret)->sin6_scope_id = scope_id;
-            SET_SA_LEN(*gws + ret, sizeof(struct sockaddr_in6))
-            ret++;
-        }
+    }
+    goto end;
+
+fail:
+    PCP_LOG(PCP_LOGLVL_DEBUG, "%s", "Read From Netlink Socket Failed...");
+    if (*gws) {
+        free(*gws);
+        *gws = NULL;
     }
 end:
     if (close(sock)) {
