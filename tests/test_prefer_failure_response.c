@@ -39,22 +39,27 @@
 
 // The test plays the PCP server itself, to send a success response that
 // assigns something other than what the request suggested.
-#define SERVER_PORT 55370
 #define HEADER_LEN 24
 #define MAP_LEN 36
 #define EXT_PORT_AT (HEADER_LEN + 18)
 #define EXT_IP_AT (HEADER_LEN + 20)
 
+// the port open_server() got, chosen by the system so tests running at the
+// same time do not collide
+static int server_port;
+
 static PCP_SOCKET open_server(void) {
     struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     TEST(sock != PCP_INVALID_SOCKET);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(SERVER_PORT);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
     TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
+    server_port = ntohs(addr.sin_port);
     return sock;
 }
 
@@ -120,9 +125,10 @@ static pcp_flow_info_t flow_info(pcp_flow_t *flow) {
 }
 
 // A MAP with PREFER_FAILURE suggesting `suggested`. The first success
-// response assigns 9.9.9.9:40000 and must be ignored; the second assigns
-// `assigned_ip`:5678 and must be taken.
-static void check_case(const char *suggested, const char *assigned_ip) {
+// response assigns `wrong_ip`:`wrong_port` and must be ignored; the second
+// assigns `assigned_ip`:5678 and must be taken.
+static void check_case(const char *suggested, const char *wrong_ip,
+                       uint16_t wrong_port, const char *assigned_ip) {
     char server_addr[32];
     uint8_t req[1100];
     struct sockaddr_storage client, internal, ext;
@@ -131,7 +137,7 @@ static void check_case(const char *suggested, const char *assigned_ip) {
     pcp_flow_t *flow;
     pcp_flow_info_t info;
 
-    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", SERVER_PORT);
+    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", server_port);
     TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
     // separate buffers: Sock_pton() returns the same static one every call
     TEST(sock_pton("127.0.0.1:1234", (struct sockaddr *)&internal) == 0);
@@ -143,7 +149,7 @@ static void check_case(const char *suggested, const char *assigned_ip) {
 
     TEST(pump(ctx, server, 500, req, sizeof(req), &client) > 0);
 
-    send_success(server, req, &client, "9.9.9.9", 40000);
+    send_success(server, req, &client, wrong_ip, wrong_port);
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_info(flow).result != pcp_state_succeeded);
 
@@ -162,9 +168,11 @@ int main(void) {
     PD_SOCKET_STARTUP();
 
     // a suggested address must be assigned as well as the port
-    check_case("8.8.8.8:5678", "8.8.8.8");
+    check_case("8.8.8.8:5678", "9.9.9.9", 40000, "8.8.8.8");
+    check_case("8.8.8.8:5678", "9.9.9.9", 5678, "8.8.8.8");
+    check_case("8.8.8.8:5678", "8.8.8.8", 40000, "8.8.8.8");
     // a zero address asks for none in particular, so only the port counts
-    check_case("0.0.0.0:5678", "7.7.7.7");
+    check_case("0.0.0.0:5678", "9.9.9.9", 40000, "7.7.7.7");
 
     PD_SOCKET_CLEANUP();
     return 0;
