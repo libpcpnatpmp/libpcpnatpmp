@@ -42,20 +42,25 @@
 // request 200 ms after it arrives, and counts requests that arrive while an
 // earlier one is still unanswered. Section 3.1 has a client send them one
 // at a time.
-#define SERVER_PORT 55378
 #define FLOWS 3
 #define ANSWER_AFTER_MS 200
 
+// the port open_server() got, chosen by the system so tests running at the
+// same time do not collide
+static int server_port;
+
 static PCP_SOCKET open_server(void) {
     struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     TEST(sock != PCP_INVALID_SOCKET);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(SERVER_PORT);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
     TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
+    server_port = ntohs(addr.sin_port);
     return sock;
 }
 
@@ -63,6 +68,70 @@ static void send_to(PCP_SOCKET server, const struct sockaddr_storage *to,
                     const uint8_t *msg, int len) {
     TEST(sendto(server, (const char *)msg, len, 0, (const struct sockaddr *)to,
                 SA_LEN((struct sockaddr *)to)) == len);
+}
+
+// A PCP server is not a NAT-PMP gateway: requests to it are not held back.
+// It answers the first MAP, which is also the client's ping, and no other;
+// the other mappings' requests must all go out at once.
+static void pcp_not_serialized(void) {
+    char addr[32];
+    uint8_t req[1100];
+    struct sockaddr_storage client;
+    PCP_SOCKET server = open_server();
+    pcp_ctx_t *ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+    int i, ms, answered = 0, seen[FLOWS] = {0}, ports = 0;
+
+    snprintf(addr, sizeof(addr), "127.0.0.1:%d", server_port);
+    TEST(pcp_add_server(ctx, Sock_pton(addr), 2) == 0);
+    for (i = 0; i < FLOWS; i++) {
+        snprintf(addr, sizeof(addr), "127.0.0.1:%d", 1234 + i);
+        TEST(pcp_new_flow(ctx, Sock_pton(addr), NULL, NULL, IPPROTO_TCP, 3600,
+                          NULL) != NULL);
+    }
+    for (ms = 0; ms < 500; ms += 10) {
+        struct timeval tout = {0, 10000};
+        fd_set fds;
+
+        pcp_pulse(ctx, NULL);
+        FD_ZERO(&fds);
+        FD_SET(server, &fds);
+        if (select((int)server + 1, &fds, NULL, NULL, &tout) > 0) {
+            socklen_t len = sizeof(client);
+            int got = (int)recvfrom(server, (char *)req, sizeof(req), 0,
+                                    (struct sockaddr *)&client, &len);
+            uint16_t port;
+
+            if (got < 60 || req[0] != 2 || req[1] != 1) {
+                continue;
+            }
+            memcpy(&port, req + 24 + 16, 2);
+            i = ntohs(port) - 1234;
+            if (i >= 0 && i < FLOWS) {
+                seen[i] = 1;
+            }
+            if (!answered) {
+                uint8_t resp[60];
+                uint32_t epoch = htonl(1000);
+
+                memcpy(resp, req, sizeof(resp));
+                resp[1] = 0x81;
+                resp[2] = resp[3] = 0;
+                memcpy(resp + 8, &epoch, 4);
+                memset(resp + 12, 0, 12);
+                send_to(server, &client, resp, sizeof(resp));
+                answered = 1;
+            }
+        }
+    }
+    for (i = 0; i < FLOWS; i++) {
+        ports += seen[i];
+    }
+    if (ports != FLOWS) {
+        printf("%d of %d PCP mappings asked for\n", ports, FLOWS);
+        TEST(0);
+    }
+    pcp_terminate(ctx, 0);
+    CLOSE(server);
 }
 
 int main(void) {
@@ -78,7 +147,7 @@ int main(void) {
     PD_SOCKET_STARTUP();
     server = open_server();
     ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
-    snprintf(addr, sizeof(addr), "127.0.0.1:%d", SERVER_PORT);
+    snprintf(addr, sizeof(addr), "127.0.0.1:%d", server_port);
     TEST(pcp_add_server(ctx, Sock_pton(addr), 0) == 0);
     for (i = 0; i < FLOWS; i++) {
         snprintf(addr, sizeof(addr), "127.0.0.1:%d", 1234 + i);
@@ -151,6 +220,8 @@ int main(void) {
 
     pcp_terminate(ctx, 0);
     CLOSE(server);
+
+    pcp_not_serialized();
     PD_SOCKET_CLEANUP();
     return 0;
 }
