@@ -133,6 +133,34 @@ int main(void) {
 
     pcp_terminate(ctx, 0);
 
+    // A PCP server keeps PCP's schedule: the first retry after PCP_RETX_IRT
+    ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
+    TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
+    flow = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
+                        IPPROTO_TCP, 3600, NULL);
+    TEST(flow != NULL);
+    requests = 0;
+    gettimeofday(&start, NULL);
+    while (ms_since(&start) < PCP_RETX_IRT + 500 && requests < 2) {
+        struct timeval tout = {0, 5000};
+        fd_set fds;
+
+        pcp_pulse(ctx, NULL);
+        FD_ZERO(&fds);
+        FD_SET(server, &fds);
+        if (select((int)server + 1, &fds, NULL, NULL, &tout) > 0) {
+            int got =
+                (int)recvfrom(server, (char *)buf, sizeof(buf), 0, NULL, NULL);
+            if (got >= 2 && buf[0] == 2) {
+                arrived[requests++] = ms_since(&start);
+            }
+        }
+    }
+    TEST(requests == 2);
+    printf("PCP retry after %ld ms\n", arrived[1] - arrived[0]);
+    TEST(arrived[1] - arrived[0] >= PCP_RETX_IRT - EARLY_MS);
+    pcp_terminate(ctx, 0);
+
     // The client gives up after the ninth attempt. Waiting the attempts out
     // takes 128 s, so each wait is cut short: the flow's and the server's
     // timeouts are moved to now before every pulse.
