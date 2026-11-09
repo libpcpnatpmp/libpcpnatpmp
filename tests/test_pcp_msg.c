@@ -232,6 +232,88 @@ int main(void) {
 #endif
         TEST(build_pcp_msg(NULL) == NULL);
     }
+    { // TEST a delete request suggests no external address or port
+        /* ::ffff:0.0.0.0 */
+        static const uint8_t v4_any[16] = {0, 0, 0, 0, 0,    0,
+                                           0, 0, 0, 0, 0xff, 0xff};
+        static const uint8_t v6_any[16] = {0};
+        struct pcp_flow_s fs;
+        pcp_server_t *s;
+        uint8_t version;
+
+        memset(&fs, 0, sizeof(fs));
+        fs.ctx = ctx;
+        fs.pcp_server_indx = pcp_add_server(ctx, Sock_pton("127.0.0.2"), 2);
+        s = get_pcp_server(ctx, fs.pcp_server_indx);
+        TEST(s != NULL);
+        fs.kd.operation = PCP_OPCODE_MAP;
+        fs.kd.map_peer.protocol = IPPROTO_UDP;
+        fs.kd.map_peer.src_port = htons(3456);
+
+        for (version = 1; version <= 2; version++) {
+            int v6;
+
+            s->pcp_version = version;
+            for (v6 = 0; v6 <= 1; v6++) {
+                const uint8_t *any = v6 ? v6_any : v4_any;
+                uint32_t *ext_ip;
+                uint16_t *ext_port;
+                pcp_request_t *req;
+
+                /* the assigned external address and port, as a response
+                 * leaves them on the flow */
+                memcpy(&fs.map_peer.ext_ip, any, sizeof(fs.map_peer.ext_ip));
+                fs.map_peer.ext_ip.s6_addr[15] = 9;
+                fs.map_peer.ext_port = htons(1234);
+
+                fs.lifetime = 0;
+                req = (pcp_request_t *)build_pcp_msg(&fs);
+                TEST(req != NULL);
+                if (version == 1) {
+                    pcp_map_v1_t *m = (pcp_map_v1_t *)req->next_data;
+                    ext_ip = m->ext_ip;
+                    ext_port = &m->ext_port;
+                } else {
+                    pcp_map_v2_t *m = (pcp_map_v2_t *)req->next_data;
+                    ext_ip = m->ext_ip;
+                    ext_port = &m->ext_port;
+                }
+                TEST(req->req_lifetime == 0);
+                TEST(*ext_port == 0);
+                TEST(memcmp(ext_ip, any, 16) == 0);
+                /* the flow keeps them */
+                TEST(fs.map_peer.ext_port == htons(1234));
+                TEST(fs.map_peer.ext_ip.s6_addr[15] == 9);
+
+                /* a renewal still suggests them */
+                fs.lifetime = 3600;
+                req = (pcp_request_t *)build_pcp_msg(&fs);
+                TEST(req != NULL);
+                TEST(*ext_port == htons(1234));
+                TEST(memcmp(ext_ip, &fs.map_peer.ext_ip, 16) == 0);
+            }
+        }
+#ifndef PCP_DISABLE_NATPMP
+        {
+            nat_pmp_map_req_t *m;
+
+            s->pcp_version = 0;
+            fs.lifetime = 0;
+            m = (nat_pmp_map_req_t *)build_pcp_msg(&fs);
+            TEST(m != NULL);
+            TEST(m->lifetime == 0);
+            TEST(m->int_port == htons(3456));
+            TEST(m->ext_port == 0);
+            TEST(fs.map_peer.ext_port == htons(1234));
+
+            fs.lifetime = 3600;
+            m = (nat_pmp_map_req_t *)build_pcp_msg(&fs);
+            TEST(m != NULL);
+            TEST(m->ext_port == htons(1234));
+        }
+#endif
+        free(fs.pcp_msg_buffer);
+    }
 
     PD_SOCKET_CLEANUP();
     return 0;

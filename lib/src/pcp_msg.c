@@ -230,19 +230,37 @@ static pcp_errno build_pcp_options(pcp_flow_t *flow, void *cur) {
     return PCP_ERR_SUCCESS;
 }
 
+/* The suggested external address and port of a MAP or PEER request: the
+ * flow's own, or zero when the request deletes the mapping (lifetime 0), as
+ * RFC 6887 section 15.1 wants. The zero address keeps the flow's address
+ * family, ::ffff:0.0.0.0 for IPv4. Returns the port; the request structs are
+ * packed, so the caller copies both into them. */
+static uint16_t suggested_ext(const pcp_flow_t *flow, struct in6_addr *ext_ip) {
+    *ext_ip = flow->map_peer.ext_ip;
+    if (flow->lifetime != 0) {
+        return flow->map_peer.ext_port;
+    }
+    if (IN6_IS_ADDR_V4MAPPED(ext_ip)) {
+        S6_ADDR32(ext_ip)[3] = 0;
+    } else {
+        memset(ext_ip, 0, sizeof(*ext_ip));
+    }
+    return 0;
+}
+
 static pcp_errno build_pcp_peer(pcp_server_t *server, pcp_flow_t *flow,
                                 void *peer_loc) {
     void *next = NULL;
+    struct in6_addr ext_ip;
 
     if (server->pcp_version == 1) {
         pcp_peer_v1_t *peer_info = (pcp_peer_v1_t *)peer_loc;
 
         peer_info->protocol = flow->kd.map_peer.protocol;
         peer_info->int_port = flow->kd.map_peer.src_port;
-        peer_info->ext_port = flow->map_peer.ext_port;
+        peer_info->ext_port = suggested_ext(flow, &ext_ip);
+        memcpy(peer_info->ext_ip, &ext_ip, sizeof(peer_info->ext_ip));
         peer_info->peer_port = flow->kd.map_peer.dst_port;
-        memcpy(peer_info->ext_ip, &flow->map_peer.ext_ip,
-               sizeof(peer_info->ext_ip));
         memcpy(peer_info->peer_ip, &flow->kd.map_peer.dst_ip,
                sizeof(peer_info->peer_ip));
         next = peer_info + 1;
@@ -251,10 +269,9 @@ static pcp_errno build_pcp_peer(pcp_server_t *server, pcp_flow_t *flow,
 
         peer_info->protocol = flow->kd.map_peer.protocol;
         peer_info->int_port = flow->kd.map_peer.src_port;
-        peer_info->ext_port = flow->map_peer.ext_port;
+        peer_info->ext_port = suggested_ext(flow, &ext_ip);
+        memcpy(peer_info->ext_ip, &ext_ip, sizeof(peer_info->ext_ip));
         peer_info->peer_port = flow->kd.map_peer.dst_port;
-        memcpy(peer_info->ext_ip, &flow->map_peer.ext_ip,
-               sizeof(peer_info->ext_ip));
         memcpy(peer_info->peer_ip, &flow->kd.map_peer.dst_ip,
                sizeof(peer_info->peer_ip));
         peer_info->nonce = flow->kd.nonce;
@@ -268,24 +285,23 @@ static pcp_errno build_pcp_peer(pcp_server_t *server, pcp_flow_t *flow,
 static pcp_errno build_pcp_map(pcp_server_t *server, pcp_flow_t *flow,
                                void *map_loc) {
     void *next = NULL;
+    struct in6_addr ext_ip;
 
     if (server->pcp_version == 1) {
         pcp_map_v1_t *map_info = (pcp_map_v1_t *)map_loc;
 
         map_info->protocol = flow->kd.map_peer.protocol;
         map_info->int_port = flow->kd.map_peer.src_port;
-        map_info->ext_port = flow->map_peer.ext_port;
-        memcpy(map_info->ext_ip, &flow->map_peer.ext_ip,
-               sizeof(map_info->ext_ip));
+        map_info->ext_port = suggested_ext(flow, &ext_ip);
+        memcpy(map_info->ext_ip, &ext_ip, sizeof(map_info->ext_ip));
         next = map_info + 1;
     } else if (server->pcp_version == 2) {
         pcp_map_v2_t *map_info = (pcp_map_v2_t *)map_loc;
 
         map_info->protocol = flow->kd.map_peer.protocol;
         map_info->int_port = flow->kd.map_peer.src_port;
-        map_info->ext_port = flow->map_peer.ext_port;
-        memcpy(map_info->ext_ip, &flow->map_peer.ext_ip,
-               sizeof(map_info->ext_ip));
+        map_info->ext_port = suggested_ext(flow, &ext_ip);
+        memcpy(map_info->ext_ip, &ext_ip, sizeof(map_info->ext_ip));
         map_info->nonce = flow->kd.nonce;
         next = map_info + 1;
     } else {
@@ -358,7 +374,8 @@ static pcp_errno build_natpmp_msg(pcp_flow_t *flow) {
         map_info->ver = 0;
         map_info->lifetime = htonl(flow->lifetime);
         map_info->int_port = flow->kd.map_peer.src_port;
-        map_info->ext_port = flow->map_peer.ext_port;
+        /* RFC 6886 section 3.4: 0 in a request that deletes the mapping */
+        map_info->ext_port = flow->lifetime ? flow->map_peer.ext_port : 0;
         flow->pcp_msg_len = sizeof(*map_info);
         return PCP_RES_SUCCESS;
 
