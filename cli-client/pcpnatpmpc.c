@@ -629,8 +629,11 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        if (p.opt_thirdparty_addr) {
-            pcp_flow_set_3rd_party_opt(flow, (struct sockaddr *)&thirdparty_ip);
+        if (p.opt_thirdparty_addr &&
+            pcp_flow_set_3rd_party_opt(
+                flow, (struct sockaddr *)&thirdparty_ip) != PCP_ERR_SUCCESS) {
+            fprintf(stderr, "Third party address must be another host's!\n");
+            exit(1);
         }
 
 #ifdef PCP_SADSCP

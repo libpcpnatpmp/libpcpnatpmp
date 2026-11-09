@@ -575,14 +575,37 @@ void pcp_flow_set_lifetime(pcp_flow_t *f, uint32_t lifetime) {
     }
 }
 
-void pcp_flow_set_3rd_party_opt(pcp_flow_t *f, struct sockaddr *thirdp_addr) {
+pcp_errno pcp_flow_set_3rd_party_opt(pcp_flow_t *f,
+                                     struct sockaddr *thirdp_addr) {
     pcp_flow_t *fiter;
+    struct in6_addr thirdp_ip;
+
+    if (!f || !thirdp_addr ||
+        (thirdp_addr->sa_family != AF_INET &&
+         thirdp_addr->sa_family != AF_INET6) ||
+        (f->kd.operation != PCP_OPCODE_MAP &&
+         f->kd.operation != PCP_OPCODE_PEER)) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                "THIRD_PARTY needs an IPv4 or IPv6 address and a MAP or PEER "
+                "flow.");
+        return PCP_ERR_BAD_ARGS;
+    }
+    pcp_fill_in6_addr(&thirdp_ip, NULL, NULL, thirdp_addr);
+    // RFC 6887 section 13.1: never the request's own source address
+    for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
+        if (IN6_ARE_ADDR_EQUAL(&thirdp_ip, &fiter->kd.src_ip)) {
+            PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                    "THIRD_PARTY must name a host other than the client.");
+            return PCP_ERR_BAD_ARGS;
+        }
+    }
 
     for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
         fiter->third_party_option_present = 1;
-        pcp_fill_in6_addr(&fiter->third_party_ip, NULL, NULL, thirdp_addr);
+        fiter->third_party_ip = thirdp_ip;
         pcp_flow_updated(fiter);
     }
+    return PCP_ERR_SUCCESS;
 }
 
 void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,

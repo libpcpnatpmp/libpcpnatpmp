@@ -189,9 +189,13 @@ void pcp_flow_set_user_data(pcp_flow_t *f, void *userdata);
 void *pcp_flow_get_user_data(pcp_flow_t *f);
 
 /*
- * Set 3rd party option to the existing message flow info.
+ * Set 3rd party option to the existing message flow info. Valid only for a
+ * MAP or PEER flow, with an AF_INET or AF_INET6 address other than the flow's
+ * source address; otherwise returns PCP_ERR_BAD_ARGS and leaves the flow
+ * unchanged.
  */
-void pcp_flow_set_3rd_party_opt(pcp_flow_t *f, struct sockaddr *thirdp_addr);
+pcp_errno pcp_flow_set_3rd_party_opt(pcp_flow_t *f,
+                                     struct sockaddr *thirdp_addr);
 
 #ifdef PCP_FLOW_PRIORITY
 /*
