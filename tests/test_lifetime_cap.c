@@ -76,7 +76,8 @@ static void check_lifetime(uint32_t lifetime, uint32_t expected) {
     TEST(info->recv_lifetime_end >= before + (time_t)expected);
     TEST(info->recv_lifetime_end <= time(NULL) + (time_t)expected);
     free(info);
-    // renewed halfway through the lifetime it goes by
+    // renewed halfway through the lifetime it goes by, not at once
+    TEST(flow->timeout.tv_sec >= before + (time_t)expected / 2 - 1);
     TEST(flow->timeout.tv_sec <= time(NULL) + (time_t)expected / 2);
 
     pcp_delete_flow(flow);
