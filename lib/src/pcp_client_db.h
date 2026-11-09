@@ -100,7 +100,8 @@ typedef struct pcp_recv_msg {
     struct sockaddr_in6 rcvd_to_addr;
     // msg buffer
     uint32_t pcp_msg_len;
-    char pcp_msg_buffer[PCP_MAX_LEN];
+    // 4 octets more than a valid response, to tell a longer one apart
+    char pcp_msg_buffer[PCP_MAX_LEN + 4];
 } pcp_recv_msg_t;
 
 struct pcp_ctx_s {
