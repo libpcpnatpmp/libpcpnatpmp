@@ -1238,8 +1238,6 @@ static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s) {
     f = server_process_rcvd_pcp_msg(s, msg);
 
     if (compare_epochs(msg, s)) {
-        s->epoch = msg->recv_epoch;
-        s->cepoch = msg->received_time;
         gettimeofday(&s->next_timeout, NULL);
         s->restart_flow_msg = f;
 
