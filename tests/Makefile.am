@@ -15,6 +15,7 @@ check_PROGRAMS = test_server_restart \
                  test_lifetime_renewal \
                  test_pcp_client_db \
                  test_pcp_api \
+                 test_prefer_failure_response \
                  test_pcp_cli_nonce \
                  test_sock_ntop \
                  test_pcp_logger \
@@ -85,6 +86,10 @@ test_pcp_client_db_LDFLAGS = -static
 test_pcp_api_SOURCES = test_pcp_api.c
 test_pcp_api_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_api_LDFLAGS = -static
+
+test_prefer_failure_response_SOURCES = test_prefer_failure_response.c
+test_prefer_failure_response_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_prefer_failure_response_LDFLAGS = -static
 
 test_pcp_cli_client_SOURCES = test_pcp_cli_client.c $(TEST_PROCESS_HELPER_SOURCES) $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_pcp_cli_client_CPPFLAGS = $(AM_CPPFLAGS) -DPCP_CLI_CLIENT_EXE=\"$(abs_top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)\" -DPCP_TEST_SERVER_EXE=\"$(abs_top_builddir)/test-server/pcp-server$(EXEEXT)\"

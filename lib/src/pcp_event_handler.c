@@ -796,6 +796,26 @@ end:
 ///////////////////////////////////////////////////////////////////////////////
 //            Helper functions for server state handlers
 
+// RFC 6887 section 13.2: a success response to a MAP with PREFER_FAILURE
+// must assign the suggested external address and port. One that does not
+// is a mapping update for an earlier mapping sent before the server
+// processed this request. Lookup by flow key has already matched the
+// protocol and nonce. pcp_flow_set_prefer_failure_opt() refuses a flow
+// without a suggested port, which section 13.2 makes MALFORMED_OPTION; a
+// zero suggested address asks for no particular address.
+static int breaks_prefer_failure(const pcp_flow_t *f,
+                                 const pcp_recv_msg_t *msg) {
+    if (msg->recv_version == 0 || msg->recv_result != PCP_RES_SUCCESS ||
+        f->kd.operation != PCP_OPCODE_MAP || !f->pfailure_option_present) {
+        return 0;
+    }
+    if (f->map_peer.ext_port != msg->assigned_ext_port) {
+        return 1;
+    }
+    return !IPV6_IS_ADDR_ANY(&f->map_peer.ext_ip) &&
+           !IN6_ARE_ADDR_EQUAL(&f->map_peer.ext_ip, &msg->assigned_ext_ip);
+}
+
 static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
                                                pcp_recv_msg_t *msg) {
     pcp_flow_t *f;
@@ -849,6 +869,13 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
 
     PCP_LOG(PCP_LOGLVL_INFO, "Found matching flow %d to received PCP message.",
             f->key_bucket);
+
+    if (breaks_prefer_failure(f, msg)) {
+        PCP_LOG(PCP_LOGLVL_INFO, "%s",
+                "Ignoring a success response that does not assign the "
+                "external address and port PREFER_FAILURE asked for.");
+        return NULL;
+    }
 
     handle_flow_event(f, FEV_RES_BEGIN + msg->recv_result, msg);
 
