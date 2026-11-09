@@ -253,14 +253,47 @@ int sock_pton_with_prefix(const char *cp, struct sockaddr *sa,
         if (prefix_begin) {
             host_name = strndup(cp, prefix_begin - cp - 1);
             prefix = strndup(prefix_begin, ip_end - prefix_begin);
-            if (prefix) {
-                *int_prefix = atoi(prefix);
-                prefix_given = 1;
+            if (!host_name || !prefix) {
+                free(host_name);
                 free(prefix);
+                return -1;
             }
+
+            {
+                char *end;
+                char *digit;
+                long parsed_prefix;
+
+                for (digit = prefix; *digit; ++digit) {
+                    if (*digit < '0' || *digit > '9') {
+                        free(host_name);
+                        free(prefix);
+                        return -2;
+                    }
+                }
+                if (*prefix == '\0') {
+                    free(host_name);
+                    free(prefix);
+                    return -2;
+                }
+
+                errno = 0;
+                parsed_prefix = strtol(prefix, &end, 10);
+                if (errno == ERANGE || *end != '\0' || parsed_prefix > 128) {
+                    free(host_name);
+                    free(prefix);
+                    return -2;
+                }
+                *int_prefix = (int)parsed_prefix;
+            }
+            prefix_given = 1;
+            free(prefix);
         } else {
             host_name = strndup(cp, ip_end - cp);
             *int_prefix = 0; /* no prefix given: full length, set below */
+            if (!host_name) {
+                return -1;
+            }
         }
         ++ip_end;
     } else {

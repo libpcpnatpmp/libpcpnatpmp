@@ -98,8 +98,12 @@ int main(void) {
                   "[10.10.250.22/16]:", (struct sockaddr *)&sa, &prefix));
     // TEST( -2 == sock_pton_with_prefix("[]:",(struct sockaddr*)&sa, &prefix)
     // );
-    TEST(0 == sock_pton_with_prefix("[10.10.250.22/]:", (struct sockaddr *)&sa,
-                                    &prefix));
+    TEST(-2 == sock_pton_with_prefix("[10.10.250.22/]:", (struct sockaddr *)&sa,
+                                     &prefix));
+    TEST(-2 == sock_pton_with_prefix("[10.10.250.22/abc]:1234",
+                                     (struct sockaddr *)&sa, &prefix));
+    TEST(-2 == sock_pton_with_prefix("[10.10.250.22/16xyz]:1234",
+                                     (struct sockaddr *)&sa, &prefix));
     TEST(0 == sock_pton_with_prefix("[10.10.250.22/0]:", (struct sockaddr *)&sa,
                                     &prefix));
     TEST(0 == sock_pton_with_prefix("[10.10.250.22/0]:0",
