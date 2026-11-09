@@ -40,18 +40,23 @@
 
 // The test plays a NAT-PMP gateway (RFC 6886) that answers the external
 // address request with success and a MAP request with a chosen result.
-#define SERVER_PORT 55376
+
+// the port open_server() got, chosen by the system so tests running at the
+// same time do not collide
+static int server_port;
 
 static PCP_SOCKET open_server(void) {
     struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     TEST(sock != PCP_INVALID_SOCKET);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(SERVER_PORT);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
     TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
+    server_port = ntohs(addr.sin_port);
     return sock;
 }
 
@@ -75,8 +80,13 @@ static void answer(PCP_SOCKET server, const uint8_t *req, int len,
         TEST(len >= 12);
         code = htons(result);
         memcpy(resp + 2, &code, 2);
-        memcpy(resp + 8, req + 4, 2); // internal port; external port and
-        resp_len = 16;                // lifetime 0, as for a failure
+        memcpy(resp + 8, req + 4, 2); // internal port
+        if (result == 0) {
+            resp[10] = 0x9c; // external port 40000
+            resp[11] = 0x40;
+            memcpy(resp + 12, req + 8, 4); // the lifetime asked for
+        } // a failure has external port and lifetime 0
+        resp_len = 16;
     }
     TEST(sendto(server, (const char *)resp, resp_len, 0,
                 (const struct sockaddr *)to,
@@ -96,7 +106,7 @@ static void check(uint16_t natpmp_code, pcp_fstate_e state, uint8_t pcp_code) {
     size_t count = 0;
     int ms;
 
-    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", SERVER_PORT);
+    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", server_port);
     TEST(pcp_add_server(ctx, Sock_pton(server_addr), 0) == 0);
     flow = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                         IPPROTO_TCP, 3600, NULL);
@@ -139,9 +149,11 @@ int main(void) {
     PD_SOCKET_STARTUP();
 
     // RFC 6886 section 3.5 codes, as RFC 6887 section 7.4 codes
+    check(0, pcp_state_succeeded, 0);            // Success
     check(2, pcp_state_failed, 2);               // Not Authorized/Refused
     check(3, pcp_state_short_lifetime_error, 7); // Network Failure
     check(4, pcp_state_short_lifetime_error, 8); // Out of resources
+    check(5, pcp_state_failed, 4);               // Unsupported opcode
     check(9, pcp_state_failed, 255);             // undefined: fatal
 
     PD_SOCKET_CLEANUP();
