@@ -71,6 +71,13 @@
 #ifndef PCP_MIN_ERROR_WAIT
 #define PCP_MIN_ERROR_WAIT 30
 #endif
+/* NAT-PMP retransmission (RFC 6886 section 3.1): wait 250 ms after the first
+ * attempt, double the wait after each one, and give up after waiting out
+ * the ninth, 64 s. This bounds both a flow's attempts and the pings of a
+ * server that has not answered yet. PCP uses PCP_RETX_IRT, PCP_RETX_MRC and
+ * PCP_MAX_PING_COUNT instead. */
+#define NATPMP_RETX_IRT 250
+#define NATPMP_RETX_MRC 9
 #define PCP_RT(rtprev)                                                         \
     ((rtprev = rtprev << 1),                                                   \
      (((8192 + (1024 - (rand() & 2047))) *                                     \
@@ -528,7 +535,7 @@ static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
         return fev_failed;
     }
 
-    f->resend_timeout = PCP_RETX_IRT;
+    f->resend_timeout = s->pcp_version == 0 ? NATPMP_RETX_IRT : PCP_RETX_IRT;
     // set timeout field
     gettimeofday(&f->timeout, NULL);
     f->timeout.tv_sec += f->resend_timeout / 1000;
@@ -554,18 +561,28 @@ static pcp_flow_event_e fhndl_resend(pcp_flow_t *f,
         return fev_none;
     }
 
+    if (s->pcp_version == 0) {
+        if (++f->retry_count >= NATPMP_RETX_MRC) {
+            return fev_failed;
+        }
+    } else {
 #if PCP_RETX_MRC > 0
-    if (++f->retry_count >= PCP_RETX_MRC) {
-        return fev_failed;
-    }
+        if (++f->retry_count >= PCP_RETX_MRC) {
+            return fev_failed;
+        }
 #endif
+    }
 
     if (pcp_flow_send_msg(f, s) != PCP_ERR_SUCCESS) {
         PCP_LOG_END(PCP_LOGLVL_DEBUG);
         return fev_failed;
     }
 
-    f->resend_timeout = PCP_RT(f->resend_timeout);
+    if (s->pcp_version == 0) {
+        f->resend_timeout <<= 1;
+    } else {
+        f->resend_timeout = PCP_RT(f->resend_timeout);
+    }
 
 #if (PCP_RETX_MRD > 0)
     {
@@ -1005,7 +1022,9 @@ static pcp_server_state_e handle_server_ping(pcp_server_t *s) {
 }
 
 static pcp_server_state_e handle_wait_ping_resp_timeout(pcp_server_t *s) {
-    if (++s->ping_count >= PCP_MAX_PING_COUNT) {
+    int max_pings = s->pcp_version == 0 ? NATPMP_RETX_MRC : PCP_MAX_PING_COUNT;
+
+    if (++s->ping_count >= max_pings) {
         gettimeofday(&s->next_timeout, NULL);
         return pss_set_not_working;
     }
