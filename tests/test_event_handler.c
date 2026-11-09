@@ -108,30 +108,32 @@ int main(void) {
         pcp_recv_msg_t msg;
         pcp_server_t s;
 
+        // RFC 6887 section 8.5, each response against the one before
+#define EPOCH(server, client, invalid)                                         \
+    do {                                                                       \
+        msg.recv_epoch = (server);                                             \
+        msg.received_time = (client);                                          \
+        TEST((invalid) == !!compare_epochs(&msg, &s));                         \
+    } while (0)
+
         memset(&s, 0, sizeof(s));
         s.epoch = ~0;
-        msg.recv_epoch = 10;
-        msg.received_time = 20;
-
-        TEST(0 == compare_epochs(&msg, &s));
-        TEST(0 == compare_epochs(&msg, &s));
-
-        msg.recv_epoch += 5;
-        msg.received_time += 5;
-        TEST(0 == compare_epochs(&msg, &s));
-
-        msg.recv_epoch += 10;
-        msg.received_time += 12;
-        TEST(0 == compare_epochs(&msg, &s));
-
-        msg.received_time -= 4;
-        TEST(0 == compare_epochs(&msg, &s));
-
-        msg.received_time -= 4;
-        TEST(0 != compare_epochs(&msg, &s));
-
-        msg.received_time += 10;
-        TEST(0 != compare_epochs(&msg, &s));
+        EPOCH(10, 20, 0); // the first response is valid
+        EPOCH(9, 20, 0);  // back by one second: reordering
+        EPOCH(10, 20, 0);
+        EPOCH(15, 25, 0);
+        EPOCH(25, 37, 0); // server 10 s, client 12 s: within 2 s
+        EPOCH(24, 37, 0); // back by one second again
+        EPOCH(22, 37, 1); // back by two seconds
+        EPOCH(0, 40, 1);  // a restarted server starts over
+        EPOCH(30, 70, 0);
+        EPOCH(40, 100, 1); // server 10 s, client 30 s
+        EPOCH(80, 110, 1); // server 40 s, client 10 s
+        EPOCH(90, 120, 0);
+        // a long gap: tolerance grows by 1/16 of the elapsed time
+        EPOCH(90 + 1600, 120 + 1600 + 100, 0);
+        EPOCH(1690 + 1600, 1820 + 1600 + 120, 1);
+#undef EPOCH
     }
 
     // test 7
