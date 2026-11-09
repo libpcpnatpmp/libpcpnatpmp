@@ -27,6 +27,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
@@ -389,7 +390,7 @@ static void run_reservation_scenario(void) {
     remove(LOG_AFTER_RESTART);
 }
 
-static volatile int announce_server_done;
+static atomic_int announce_server_done;
 
 typedef struct announce_server_args {
     uint8_t requests_before_restart;
@@ -428,7 +429,7 @@ static void *announce_server_main(void *arg) {
     server_info.announce_count = 5;
     server_info.announce_to = client;
     execPCPServer("5351", "0.0.0.0", &server_info);
-    announce_server_done = 1;
+    atomic_store(&announce_server_done, 1);
     return NULL;
 }
 
@@ -485,7 +486,7 @@ static void run_announce_scenario(int client_hears_announcements) {
 
     remove(LOG_BEFORE_RESTART);
     remove(LOG_AFTER_RESTART);
-    announce_server_done = 0;
+    atomic_store(&announce_server_done, 0);
     args.requests_before_restart = client_hears_announcements ? 1 : 2;
     args.announce_to_client = client_hears_announcements;
     TEST(pthread_create(&thread, NULL, announce_server_main, &args) == 0);
@@ -518,7 +519,7 @@ static void run_announce_scenario(int client_hears_announcements) {
         pcp_pulse(ctx, &tout);
         select(0, NULL, NULL, NULL, &tout);
         gettimeofday(&now, NULL);
-    } while (!announce_server_done && timercmp(&now, &end, <));
+    } while (!atomic_load(&announce_server_done) && timercmp(&now, &end, <));
     pthread_join(thread, NULL);
 
     pcp_close_flow(flow);
@@ -535,8 +536,8 @@ static void run_announce_scenario(int client_hears_announcements) {
     {
         static const char *const must_appear[] = {
             "MAP int port: \t\t 3004", "OPTION: \t Filter",
-            "FILTER PORT: 4444", "FILTER IP: ::ffff:8.8.8.8",
-            "OPTION: \t Prefer fail", NULL};
+            "FILTER PORT: 4444",       "FILTER IP: ::ffff:8.8.8.8",
+            "OPTION: \t Prefer fail",  NULL};
         /* every request of the server before the restart, 3005 included
          * when it is there, comes back unchanged */
         check_reservations_resent(must_appear);
