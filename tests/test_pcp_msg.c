@@ -102,7 +102,8 @@ int main(void) {
         TEST(msg.recv_version == 0);
         TEST(msg.recv_epoch == 1234);
         TEST(msg.recv_lifetime == 2233);
-        TEST(msg.recv_result == 11);
+        // NAT-PMP defines no code 11: the undefined, fatal PCP code 255
+        TEST(msg.recv_result == 255);
 
         memset(&msg, 0, sizeof(msg));
         memcpy(&msg.pcp_msg_buffer, &natpmp_mu, sizeof(natpmp_mu));
@@ -114,7 +115,8 @@ int main(void) {
         TEST(msg.recv_version == 0);
         TEST(msg.recv_epoch == 1234);
         TEST(msg.recv_lifetime == 2233);
-        TEST(msg.recv_result == 11);
+        // NAT-PMP defines no code 11: the undefined, fatal PCP code 255
+        TEST(msg.recv_result == 255);
 
         msg.pcp_msg_len = sizeof(natpmp_mu) - 1;
         TEST(parse_response(&msg) != PCP_ERR_SUCCESS);

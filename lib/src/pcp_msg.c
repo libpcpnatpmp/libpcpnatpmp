@@ -590,6 +590,29 @@ static pcp_errno parse_sadscp(pcp_recv_msg_t *f, void *r) {
 #endif
 
 #ifndef PCP_DISABLE_NATPMP
+// A NAT-PMP result code (RFC 6886 section 3.5) as the PCP result code
+// (RFC 6887 section 7.4) with the same meaning, as flows act on PCP codes.
+// An undefined NAT-PMP code MUST be treated as a fatal error; 255 is
+// undefined in PCP too, so it fails the flow.
+static uint32_t natpmp_result(uint16_t code) {
+    switch (code) {
+    case 0:
+        return PCP_RES_SUCCESS;
+    case 1:
+        return PCP_RES_UNSUPP_VERSION;
+    case 2:
+        return PCP_RES_NOT_AUTHORIZED;
+    case 3:
+        return PCP_RES_NETWORK_FAILURE;
+    case 4:
+        return PCP_RES_NO_RESOURCES;
+    case 5:
+        return PCP_RES_UNSUPP_OPCODE;
+    default:
+        return 255;
+    }
+}
+
 static pcp_errno parse_v0_resp(pcp_recv_msg_t *f, pcp_response_t *resp) {
     switch (f->kd.operation) {
     case PCP_OPCODE_ANNOUNCE:
@@ -614,7 +637,7 @@ static pcp_errno parse_v0_resp(pcp_recv_msg_t *f, pcp_response_t *resp) {
             f->kd.map_peer.src_port = r->int_port;
             f->recv_epoch = ntohl(r->epoch);
             f->recv_lifetime = ntohl(r->lifetime);
-            f->recv_result = ntohs(r->result);
+            f->recv_result = natpmp_result(ntohs(r->result));
             f->kd.map_peer.protocol = f->kd.operation == NATPMP_OPCODE_MAP_TCP
                                           ? IPPROTO_TCP
                                           : IPPROTO_UDP;
@@ -629,7 +652,7 @@ static pcp_errno parse_v0_resp(pcp_recv_msg_t *f, pcp_response_t *resp) {
     if (f->pcp_msg_len == sizeof(nat_pmp_inv_version_resp_t)) {
         nat_pmp_inv_version_resp_t *r = (nat_pmp_inv_version_resp_t *)resp;
 
-        f->recv_result = ntohs(r->result);
+        f->recv_result = natpmp_result(ntohs(r->result));
         f->recv_epoch = ntohl(r->epoch);
         return PCP_ERR_SUCCESS;
     }

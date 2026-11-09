@@ -15,6 +15,7 @@ check_PROGRAMS = test_server_restart \
                  test_lifetime_renewal \
                  test_pcp_client_db \
                  test_pcp_api \
+                 test_natpmp_result_codes \
                  test_result_codes \
                  test_pcp_cli_nonce \
                  test_sock_ntop \
@@ -86,6 +87,10 @@ test_pcp_client_db_LDFLAGS = -static
 test_pcp_api_SOURCES = test_pcp_api.c
 test_pcp_api_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_pcp_api_LDFLAGS = -static
+
+test_natpmp_result_codes_SOURCES = test_natpmp_result_codes.c
+test_natpmp_result_codes_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_natpmp_result_codes_LDFLAGS = -static
 
 test_result_codes_SOURCES = test_result_codes.c
 test_result_codes_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
