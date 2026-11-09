@@ -184,6 +184,13 @@ static void check(int peer) {
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_info(flow).result != pcp_state_succeeded);
 
+    // THIRD_PARTY with the right address but a length other than 16
+    n = put_third_party(opts, "192.0.2.5");
+    opts[3] = 12;
+    send_success(server, req, &client, 40003, opts, n);
+    pump(ctx, server, 200, req, sizeof(req), &client);
+    TEST(flow_info(flow).result != pcp_state_succeeded);
+
     // the flow's THIRD_PARTY, after an option of 2 octets padded to 4
     memset(opts, 0, OPT_HDR_LEN + 4);
     opts[0] = UNKNOWN_OPTIONAL;
