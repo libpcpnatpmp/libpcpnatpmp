@@ -93,6 +93,8 @@ typedef struct pcp_recv_msg {
     uint32_t recv_lifetime;
     uint32_t recv_result;
     time_t received_time;
+    // valid when opt_flags has optf_3rd_party
+    struct in6_addr third_party_ip;
 
     // control data
     uint32_t pcp_server_indx;

@@ -46,6 +46,7 @@ set (TEST_LIFETIME_RENEWAL_SOURCES
 )
 add_executable (test_lifetime_renewal ${TEST_LIFETIME_RENEWAL_SOURCES})
 add_executable (test_pcp_api test_pcp_api.c)
+add_executable (test_third_party_response test_third_party_response.c)
 set (TEST_PCP_CLI_NONCE_SRC
     test_pcp_cli_nonce.c
     ${TEST_PROCESS_HELPER_SOURCES}
@@ -116,6 +117,7 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
+target_link_libraries (test_third_party_response pcpnatpmp)
 target_link_libraries (test_pcp_cli_client pcpnatpmp)
 target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
@@ -162,6 +164,7 @@ register_pcp_test (test_error_lifetime)
 register_pcp_test (test_short_error_wait)
 register_pcp_test (test_server_restart)
 register_pcp_test (test_sock_ntop)
+register_pcp_test (test_third_party_response)
 register_pcp_test (test_version_negotiation)
 
 if (NOT WIN32)
