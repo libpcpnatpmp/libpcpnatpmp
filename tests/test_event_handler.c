@@ -124,7 +124,11 @@ int main(void) {
         EPOCH(15, 25, 0);
         EPOCH(25, 37, 0); // server 10 s, client 12 s: within 2 s
         EPOCH(24, 37, 0); // back by one second again
-        EPOCH(22, 37, 1); // back by two seconds
+        EPOCH(25, 37, 0);
+        // back by one second while the client's clock went on 2 s: the
+        // drift check then finds the server 3 s behind
+        EPOCH(24, 39, 1);
+        EPOCH(22, 39, 1); // back by two seconds
         EPOCH(0, 40, 1);  // a restarted server starts over
         EPOCH(30, 70, 0);
         EPOCH(40, 100, 1); // server 10 s, client 30 s
