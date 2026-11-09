@@ -17,6 +17,7 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_api \
                  test_natpmp_result_codes \
                  test_result_codes \
+                 test_no_resources_hold \
                  test_pcp_cli_nonce \
                  test_sock_ntop \
                  test_pcp_logger \
@@ -95,6 +96,10 @@ test_natpmp_result_codes_LDFLAGS = -static
 test_result_codes_SOURCES = test_result_codes.c
 test_result_codes_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_result_codes_LDFLAGS = -static
+
+test_no_resources_hold_SOURCES = test_no_resources_hold.c
+test_no_resources_hold_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_no_resources_hold_LDFLAGS = -static
 
 test_pcp_cli_client_SOURCES = test_pcp_cli_client.c $(TEST_PROCESS_HELPER_SOURCES) $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_pcp_cli_client_CPPFLAGS = $(AM_CPPFLAGS) -DPCP_CLI_CLIENT_EXE=\"$(abs_top_builddir)/cli-client/pcpnatpmpc$(EXEEXT)\" -DPCP_TEST_SERVER_EXE=\"$(abs_top_builddir)/test-server/pcp-server$(EXEEXT)\"

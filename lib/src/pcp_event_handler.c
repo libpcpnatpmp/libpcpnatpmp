@@ -473,6 +473,17 @@ static int pace_defer(pcp_flow_t *f, int first_transmission) {
         f->timeout = server->restart_resend_at;
         return 1;
     }
+    // a deletion (lifetime 0) is held back only after a refused deletion
+    if (server && ((first_transmission && f->lifetime != 0) ||
+                   server->no_resources_all)) {
+        struct timeval ctv;
+
+        gettimeofday(&ctv, NULL);
+        if (timeval_comp(&ctv, &server->no_resources_until) < 0) {
+            f->timeout = server->no_resources_until;
+            return 1;
+        }
+    }
 #if PCP_PACE_BURST > 0
     pcp_ctx_t *ctx = f->ctx;
     struct timeval now;
@@ -604,6 +615,29 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
 
     gettimeofday(&f->timeout, NULL);
     f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
+
+    // RFC 6887 sections 11.4 and 12.4: NO_RESOURCES holds back requests for
+    // new mappings to the whole server for the error's lifetime, and every
+    // request if it answered a deletion
+    if (msg->recv_version != 0 && msg->recv_result == PCP_RES_NO_RESOURCES) {
+        pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
+
+        if (s) {
+            struct timeval ctv, until = f->timeout;
+            int all = f->lifetime == 0;
+
+            // a hold still running keeps its end and scope if they are wider
+            gettimeofday(&ctv, NULL);
+            if (timeval_comp(&ctv, &s->no_resources_until) < 0) {
+                all = all || s->no_resources_all;
+                if (timeval_comp(&until, &s->no_resources_until) < 0) {
+                    until = s->no_resources_until;
+                }
+            }
+            s->no_resources_until = until;
+            s->no_resources_all = (uint8_t)all;
+        }
+    }
 
     return fev_none;
 }
@@ -1193,6 +1227,10 @@ static pcp_server_state_e handle_server_restart(pcp_server_t *s) {
         s->next_timeout = s->restart_resend_at;
         return pss_wait_io;
     }
+    // a NO_RESOURCES hold described the server before it restarted
+    s->no_resources_until.tv_sec = 0;
+    s->no_resources_until.tv_usec = 0;
+    s->no_resources_all = 0;
 
     if (max_ms == 0) {
         resend_after_restart(s);

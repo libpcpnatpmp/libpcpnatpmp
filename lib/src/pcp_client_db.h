@@ -237,6 +237,10 @@ struct pcp_server {
     // re-sending after a restart is waiting for restart_resend_at
     uint8_t restart_pending;
     struct timeval restart_resend_at;
+    // after NO_RESOURCES, no new mappings are asked for until
+    // no_resources_until, and no requests at all if no_resources_all
+    struct timeval no_resources_until;
+    uint8_t no_resources_all;
     void *app_data;
 };
 
