@@ -144,12 +144,14 @@ void pcp_terminate(pcp_ctx_t *ctx, int close_flows);
  *  src_addr    source IP/port
  *  dst_addr    destination IP/port - optional
  *  ext_addr    sugg. ext. IP/port  - optional
- *  protocol    protocol associated with flow
+ *  protocol    protocol associated with flow; 0 maps all protocols, and
+ *              then needs source port 0 (all ports)
  *  lifetime    time in seconds how long should mapping last
  *  userdata    pointer to user data associated with a new flow
  *
  *  return value
- *  pcp_flow_t *used in other functions to reference this flow.
+ *  pcp_flow_t *used in other functions to reference this flow, or NULL on
+ *  invalid arguments.
  */
 pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
                          struct sockaddr *dst_addr, struct sockaddr *ext_addr,
