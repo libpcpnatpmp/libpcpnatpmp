@@ -39,23 +39,29 @@
 
 // The test plays the PCP server itself, to send success responses with
 // and without the THIRD_PARTY option.
-#define SERVER_PORT 55371
 #define HEADER_LEN 24
 #define MAP_LEN 36
+#define PEER_LEN 56
 #define OPT_HDR_LEN 4
 #define THIRD_PARTY 1
 #define UNKNOWN_OPTIONAL 200
 
+// the port open_server() got, chosen by the system so tests running at the
+// same time do not collide
+static int server_port;
+
 static PCP_SOCKET open_server(void) {
     struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     TEST(sock != PCP_INVALID_SOCKET);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(SERVER_PORT);
     inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
     TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
+    server_port = ntohs(addr.sin_port);
     return sock;
 }
 
@@ -97,80 +103,86 @@ static size_t put_third_party(uint8_t *at, const char *ip) {
     return OPT_HDR_LEN + 16;
 }
 
-// Answers the MAP request in `req` with success and the `opts_len` octets
-// of options in `opts`.
+// Answers the MAP or PEER request in `req` with success, assigning external
+// port `ext_port`, and the `opts_len` octets of options in `opts`.
 static void send_success(PCP_SOCKET server, const uint8_t *req,
-                         const struct sockaddr_storage *to, const uint8_t *opts,
-                         size_t opts_len) {
-    uint8_t resp[HEADER_LEN + MAP_LEN + 64];
+                         const struct sockaddr_storage *to, uint16_t ext_port,
+                         const uint8_t *opts, size_t opts_len) {
+    uint8_t resp[HEADER_LEN + PEER_LEN + 64];
     uint32_t lifetime = htonl(3600);
     uint32_t epoch = htonl(1000);
-    size_t len = HEADER_LEN + MAP_LEN + opts_len;
+    uint16_t port = htons(ext_port);
+    size_t body = req[1] == 2 ? PEER_LEN : MAP_LEN;
+    size_t len = HEADER_LEN + body + opts_len;
 
     TEST(len <= sizeof(resp));
     memset(resp, 0, HEADER_LEN);
-    resp[0] = 2;    // version
-    resp[1] = 0x81; // MAP response
+    resp[0] = 2;                        // version
+    resp[1] = (uint8_t)(0x80 | req[1]); // MAP or PEER response
     memcpy(resp + 4, &lifetime, 4);
     memcpy(resp + 8, &epoch, 4);
-    // nonce, protocol, ports and suggested address as in the request
-    memcpy(resp + HEADER_LEN, req + HEADER_LEN, MAP_LEN);
-    memcpy(resp + HEADER_LEN + MAP_LEN, opts, opts_len);
+    // nonce, protocol, ports and addresses as in the request
+    memcpy(resp + HEADER_LEN, req + HEADER_LEN, body);
+    memcpy(resp + HEADER_LEN + 18, &port, 2);
+    if (opts_len > 0) {
+        memcpy(resp + HEADER_LEN + body, opts, opts_len);
+    }
     TEST(sendto(server, (const char *)resp, (int)len, 0,
                 (const struct sockaddr *)to,
                 SA_LEN((struct sockaddr *)to)) == (int)len);
 }
 
-static pcp_fstate_e flow_result(pcp_flow_t *flow) {
+static pcp_flow_info_t flow_info(pcp_flow_t *flow) {
     size_t count = 0;
     pcp_flow_info_t *info = pcp_flow_get_info(flow, &count);
-    pcp_fstate_e result;
+    pcp_flow_info_t first;
 
     TEST(info != NULL && count == 1);
-    result = info[0].result;
+    first = info[0];
     free(info);
-    return result;
+    return first;
 }
 
-int main(void) {
+// A MAP, or a PEER to 127.0.0.1:4321, for 192.0.2.5 (THIRD_PARTY) takes only
+// a success response that carries THIRD_PARTY 192.0.2.5.
+static void check(int peer) {
     char server_addr[32];
     uint8_t req[1100], opts[64];
     size_t n;
-    struct sockaddr_storage client, internal, third;
-    PCP_SOCKET server;
-    pcp_ctx_t *ctx;
+    struct sockaddr_storage client, internal, remote, third;
+    PCP_SOCKET server = open_server();
+    pcp_ctx_t *ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
     pcp_flow_t *flow;
 
-    pcp_log_level = PCP_LOGLVL_NONE;
-    PD_SOCKET_STARTUP();
-    server = open_server();
-    ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
-    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", SERVER_PORT);
+    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", server_port);
     TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
     TEST(sock_pton("127.0.0.1:1234", (struct sockaddr *)&internal) == 0);
+    TEST(sock_pton("127.0.0.1:4321", (struct sockaddr *)&remote) == 0);
     TEST(sock_pton("192.0.2.5", (struct sockaddr *)&third) == 0);
-    flow = pcp_new_flow(ctx, (struct sockaddr *)&internal, NULL, NULL,
+    flow = pcp_new_flow(ctx, (struct sockaddr *)&internal,
+                        peer ? (struct sockaddr *)&remote : NULL, NULL,
                         IPPROTO_TCP, 3600, NULL);
     TEST(flow != NULL);
     pcp_flow_set_3rd_party_opt(flow, (struct sockaddr *)&third);
     TEST(pump(ctx, server, 500, req, sizeof(req), &client) > 0);
+    TEST(req[1] == (peer ? 2 : 1));
 
     // no THIRD_PARTY: a mapping of the client itself
-    send_success(server, req, &client, NULL, 0);
+    send_success(server, req, &client, 40001, NULL, 0);
     pump(ctx, server, 200, req, sizeof(req), &client);
-    TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(flow_info(flow).result != pcp_state_succeeded);
 
     // THIRD_PARTY for another internal host
     n = put_third_party(opts, "192.0.2.6");
-    send_success(server, req, &client, opts, n);
+    send_success(server, req, &client, 40002, opts, n);
     pump(ctx, server, 200, req, sizeof(req), &client);
-    TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(flow_info(flow).result != pcp_state_succeeded);
 
     // THIRD_PARTY cut off by the end of the message
     n = put_third_party(opts, "192.0.2.5");
-    send_success(server, req, &client, opts, n - 4);
+    send_success(server, req, &client, 40003, opts, n - 4);
     pump(ctx, server, 200, req, sizeof(req), &client);
-    TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(flow_info(flow).result != pcp_state_succeeded);
 
     // the flow's THIRD_PARTY, after an option of 2 octets padded to 4
     memset(opts, 0, OPT_HDR_LEN + 4);
@@ -178,12 +190,25 @@ int main(void) {
     opts[3] = 2;
     n = OPT_HDR_LEN + 4;
     n += put_third_party(opts + n, "192.0.2.5");
-    send_success(server, req, &client, opts, n);
+    send_success(server, req, &client, 40004, opts, n);
     pump(ctx, server, 200, req, sizeof(req), &client);
-    TEST(flow_result(flow) == pcp_state_succeeded);
+    TEST(flow_info(flow).result == pcp_state_succeeded);
+    TEST(flow_info(flow).ext_port == htons(40004));
+
+    // a later mapping update without THIRD_PARTY is for another mapping
+    send_success(server, req, &client, 40005, NULL, 0);
+    pump(ctx, server, 200, req, sizeof(req), &client);
+    TEST(flow_info(flow).ext_port == htons(40004));
 
     pcp_terminate(ctx, 0);
     CLOSE(server);
+}
+
+int main(void) {
+    pcp_log_level = PCP_LOGLVL_NONE;
+    PD_SOCKET_STARTUP();
+    check(0);
+    check(1);
     PD_SOCKET_CLEANUP();
     return 0;
 }
