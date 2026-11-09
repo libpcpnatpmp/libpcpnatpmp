@@ -157,6 +157,24 @@ int main(void) {
     TEST(pcp_flow_set_3rd_party_opt(f2, Sock_pton("192.0.2.5")) ==
          PCP_ERR_SUCCESS);
     TEST(f2->third_party_option_present == 1);
+    // a flow from 0.0.0.0 takes the address that reaches its server, here
+    // 127.0.0.1, and THIRD_PARTY may not name that address either
+    {
+        pcp_flow_t *any;
+
+        TEST((any = pcp_new_flow(ctx, Sock_pton("0.0.0.0:1235"), NULL, NULL,
+                                 IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(pcp_flow_set_3rd_party_opt(any, Sock_pton("127.0.0.1")) ==
+             PCP_ERR_BAD_ARGS);
+        TEST(any->third_party_option_present == 0);
+        // only MAP and PEER carry THIRD_PARTY; an ANNOUNCE ping does not
+        any->kd.operation = PCP_OPCODE_ANNOUNCE;
+        TEST(pcp_flow_set_3rd_party_opt(any, Sock_pton("192.0.2.5")) ==
+             PCP_ERR_BAD_ARGS);
+        TEST(any->third_party_option_present == 0);
+        any->kd.operation = PCP_OPCODE_MAP;
+        pcp_delete_flow(any);
+    }
 
     pcp_flow_set_lifetime(f1, 1000);
     TEST((f1->lifetime) >= 99);
