@@ -39,22 +39,25 @@
 
 // The test plays the PCP server itself, to send responses that RFC 6887
 // section 8.3 says a client drops.
-#define SERVER_PORT 55372
-#define OTHER_PORT 55373
 #define HEADER_LEN 24
 #define MAP_LEN 36
 #define MAX_LEN 1100
 
-static PCP_SOCKET open_socket(int port) {
+// Binds `ip`:`*port`, or a port the system picks if `*port` is 0, so tests
+// running at the same time do not collide; `*port` gets the bound port.
+static PCP_SOCKET open_socket(const char *ip, int *port) {
     struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
 
     TEST(sock != PCP_INVALID_SOCKET);
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t)port);
-    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+    addr.sin_port = htons((uint16_t)*port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
     TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
+    *port = ntohs(addr.sin_port);
     return sock;
 }
 
@@ -116,16 +119,18 @@ int main(void) {
     char server_addr[32];
     uint8_t req[MAX_LEN];
     struct sockaddr_storage client;
-    PCP_SOCKET server, other;
+    PCP_SOCKET server, other_port, other_addr;
+    int port = 0, unused = 0;
     pcp_ctx_t *ctx;
     pcp_flow_t *flow;
 
     pcp_log_level = PCP_LOGLVL_NONE;
     PD_SOCKET_STARTUP();
-    server = open_socket(SERVER_PORT);
-    other = open_socket(OTHER_PORT);
+    server = open_socket("127.0.0.1", &port);
+    other_port = open_socket("127.0.0.1", &unused);
+    other_addr = open_socket("127.0.0.2", &port);
     ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
-    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", SERVER_PORT);
+    snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", port);
     TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
     flow = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                         IPPROTO_TCP, 3600, NULL);
@@ -133,7 +138,17 @@ int main(void) {
     TEST(pump(ctx, server, 500, req, sizeof(req), &client) > 0);
 
     // from the server's address, but not from its port
-    send_success(other, req, &client, HEADER_LEN + MAP_LEN);
+    send_success(other_port, req, &client, HEADER_LEN + MAP_LEN);
+    pump(ctx, server, 200, req, sizeof(req), &client);
+    TEST(flow_result(flow) != pcp_state_succeeded);
+
+    // from the server's port, but not from its address
+    send_success(other_addr, req, &client, HEADER_LEN + MAP_LEN);
+    pump(ctx, server, 200, req, sizeof(req), &client);
+    TEST(flow_result(flow) != pcp_state_succeeded);
+
+    // not a multiple of 4 octets
+    send_success(server, req, &client, HEADER_LEN + MAP_LEN + 2);
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
 
@@ -142,13 +157,15 @@ int main(void) {
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
 
-    // valid, and exactly 1100 octets
+    // valid, and exactly 1100 octets; taking it also shows the source port
+    // check compares the two ports in the same byte order
     send_success(server, req, &client, MAX_LEN);
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) == pcp_state_succeeded);
 
     pcp_terminate(ctx, 0);
-    CLOSE(other);
+    CLOSE(other_addr);
+    CLOSE(other_port);
     CLOSE(server);
     PD_SOCKET_CLEANUP();
     return 0;
