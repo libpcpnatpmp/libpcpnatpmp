@@ -142,7 +142,8 @@ void pcp_terminate(pcp_ctx_t *ctx, int close_flows);
 /*
  * Creates new PCP message from parameters parsed to this function:
  *  src_addr    source IP/port
- *  dst_addr    destination IP/port - optional
+ *  dst_addr    destination IP/port - optional; makes the flow a PEER, which
+ *              needs a non-zero protocol and source and destination ports
  *  ext_addr    sugg. ext. IP/port  - optional
  *  protocol    protocol associated with flow; 0 maps all protocols, and
  *              then needs source port 0 (all ports)

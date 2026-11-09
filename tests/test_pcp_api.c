@@ -30,6 +30,8 @@ int main(void) {
     pcp_flow_t *f1, *f2;
     pcp_ctx_t *ctx;
     struct sockaddr_storage internal, suggested;
+    struct sockaddr_storage int_port0, int_port1, peer_port0, peer_port1;
+    struct sockaddr_storage int6, peer6;
 
     pcp_log_level = PCP_LOGLVL_NONE;
 
@@ -79,8 +81,12 @@ int main(void) {
 
     ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
     TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
-    TEST((pcp_new_flow(ctx, Sock_pton("[::1]:1234"), Sock_pton("[::1]"), NULL,
-                       IPPROTO_TCP, 100, NULL)) == NULL);
+    // no IPv6 server; separate buffers, as Sock_pton() returns the same
+    // static one each call
+    TEST(sock_pton("[::1]:1234", (struct sockaddr *)&int6) == 0);
+    TEST(sock_pton("[::1]:4321", (struct sockaddr *)&peer6) == 0);
+    TEST((pcp_new_flow(ctx, (struct sockaddr *)&int6, (struct sockaddr *)&peer6,
+                       NULL, IPPROTO_TCP, 100, NULL)) == NULL);
 
     pcp_pulse(NULL, NULL);
     pcp_pulse(ctx, NULL);
@@ -96,9 +102,28 @@ int main(void) {
                             NULL)) != NULL);
     pcp_delete_flow(f1);
 
-    TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"),
-                            Sock_pton("127.0.0.1"), NULL, IPPROTO_TCP, 100,
-                            NULL)) != NULL);
+    // a PEER needs a protocol, an internal port and a remote peer port
+    TEST(sock_pton("127.0.0.1", (struct sockaddr *)&int_port0) == 0);
+    TEST(sock_pton("127.0.0.1:1234", (struct sockaddr *)&int_port1) == 0);
+    TEST(sock_pton("127.0.0.2", (struct sockaddr *)&peer_port0) == 0);
+    TEST(sock_pton("127.0.0.2:4321", (struct sockaddr *)&peer_port1) == 0);
+    TEST(pcp_new_flow(ctx, (struct sockaddr *)&int_port1,
+                      (struct sockaddr *)&peer_port1, NULL, 0, 100,
+                      NULL) == NULL);
+    TEST(pcp_new_flow(ctx, (struct sockaddr *)&int_port0,
+                      (struct sockaddr *)&peer_port1, NULL, IPPROTO_TCP, 100,
+                      NULL) == NULL);
+    TEST(pcp_new_flow(ctx, (struct sockaddr *)&int_port1,
+                      (struct sockaddr *)&peer_port0, NULL, IPPROTO_TCP, 100,
+                      NULL) == NULL);
+    TEST((f1 = pcp_new_flow(ctx, (struct sockaddr *)&int_port1,
+                            (struct sockaddr *)&peer_port1, NULL, IPPROTO_TCP,
+                            100, NULL)) != NULL);
+    pcp_delete_flow(f1);
+
+    TEST((f1 = pcp_new_flow(ctx, (struct sockaddr *)&int_port1,
+                            (struct sockaddr *)&peer_port1, NULL, IPPROTO_TCP,
+                            100, NULL)) != NULL);
     TEST((f2 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                             IPPROTO_TCP, 100, NULL)) != NULL);
     // PREFER_FAILURE goes only into a MAP that suggests an external port

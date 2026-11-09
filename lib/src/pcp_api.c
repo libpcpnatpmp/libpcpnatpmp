@@ -464,6 +464,15 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
         pcp_fill_in6_addr(&kd.map_peer.dst_ip, &kd.map_peer.dst_port, NULL,
                           dst_addr);
         kd.operation = PCP_OPCODE_PEER;
+        // RFC 6887 section 12.1: a PEER names one protocol and both ports
+        if (protocol == 0 || kd.map_peer.src_port == 0 ||
+            kd.map_peer.dst_port == 0) {
+            PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                    "A PEER needs a protocol, an internal port and a remote "
+                    "peer port.");
+            PCP_LOG_END(PCP_LOGLVL_DEBUG);
+            return NULL;
+        }
         if (src_addr->sa_family == AF_INET) {
             if (S6_ADDR32(&kd.src_ip)[3] == INADDR_ANY) {
                 findsaddr((struct sockaddr_in *)dst_addr, &kd.src_ip);
