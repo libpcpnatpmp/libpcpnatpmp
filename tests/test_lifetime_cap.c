@@ -89,6 +89,8 @@ int main(void) {
     PD_SOCKET_STARTUP();
     pcp_log_level = PCP_LOGLVL_WARN;
     check_lifetime(3600, 3600);
+    check_lifetime(DAY, DAY);
+    check_lifetime(DAY + 1, DAY);
     check_lifetime(UINT32_MAX, DAY);
     printf("Tests succeeded.\n\n");
     PD_SOCKET_CLEANUP();
