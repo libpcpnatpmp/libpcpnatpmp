@@ -332,7 +332,7 @@ static void run_reservation_scenario(void) {
         "MAP int port: \t\t 3001",
         "MAP int port: \t\t 3002",
         "OPTION: \t Filter",
-        "PREFIX: 12",
+        "PREFIX: 108",
         "FILTER PORT: 4444",
         "PEER Opcode specific information.",
         "Internal port: \t\t 3003",

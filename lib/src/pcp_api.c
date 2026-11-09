@@ -572,14 +572,57 @@ void pcp_flow_set_3rd_party_opt(pcp_flow_t *f, struct sockaddr *thirdp_addr) {
 void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                              uint8_t filter_prefix) {
     pcp_flow_t *fiter;
+    struct in6_addr wire_ip;
+    uint16_t wire_port;
+    uint8_t wire_prefix;
+
+    if (!f || !filter_ip ||
+        (filter_ip->sa_family != AF_INET && filter_ip->sa_family != AF_INET6)) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s: invalid flow or filter address",
+                __FUNCTION__);
+        return;
+    }
+
+    pcp_fill_in6_addr(&wire_ip, &wire_port, NULL, filter_ip);
+
+    /* RFC 6887 section 13.3: an IPv4 peer is sent IPv4-mapped, so its prefix
+     * length goes on the wire plus 96 (valid: 96 to 128). Decide on the
+     * address that is sent, so an IPv4 peer given as AF_INET6 ::ffff:a.b.c.d
+     * is handled the same as one given as AF_INET.
+     * Prefix 0 removes all filters, and is valid only for an IPv6 address:
+     * with an IPv4-mapped one, even ::ffff:0:0, it is MALFORMED_OPTION.
+     * So a removal is sent as ::/0, port 0, whatever peer was given. */
+    if (filter_prefix == 0) {
+        memset(&wire_ip, 0, sizeof(wire_ip));
+        wire_port = 0;
+        wire_prefix = 0;
+    } else if (IN6_IS_ADDR_V4MAPPED(&wire_ip)) {
+        if (filter_prefix <= 32) {
+            wire_prefix = filter_prefix + 96;
+        } else if (filter_prefix >= 96 && filter_prefix <= 128) {
+            wire_prefix = filter_prefix;
+        } else {
+            PCP_LOG(PCP_LOGLVL_PERR,
+                    "%s: invalid prefix length %u for an IPv4 filter address "
+                    "(valid: 0 to 32, or 96 to 128 already adjusted)",
+                    __FUNCTION__, (unsigned)filter_prefix);
+            return;
+        }
+    } else if (filter_prefix <= 128) {
+        wire_prefix = filter_prefix;
+    } else {
+        PCP_LOG(PCP_LOGLVL_PERR,
+                "%s: invalid prefix length %u for an IPv6 filter address "
+                "(valid: 0 to 128)",
+                __FUNCTION__, (unsigned)filter_prefix);
+        return;
+    }
 
     for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
-        if (!fiter->filter_option_present) {
-            fiter->filter_option_present = 1;
-        }
-        pcp_fill_in6_addr(&fiter->filter_ip, &fiter->filter_port, NULL,
-                          filter_ip);
-        fiter->filter_prefix = filter_prefix;
+        fiter->filter_option_present = 1;
+        fiter->filter_ip = wire_ip;
+        fiter->filter_port = wire_port;
+        fiter->filter_prefix = wire_prefix;
         pcp_flow_updated(fiter);
     }
 }

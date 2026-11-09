@@ -225,6 +225,7 @@ int sock_pton_with_prefix(const char *cp, struct sockaddr *sa,
     const char *ip_end;
     char *host_name = NULL;
     const char *port = NULL;
+    int prefix_given = 0;
 
     if ((!cp) || (!sa) || (!int_prefix)) {
         return -1;
@@ -254,11 +255,12 @@ int sock_pton_with_prefix(const char *cp, struct sockaddr *sa,
             prefix = strndup(prefix_begin, ip_end - prefix_begin);
             if (prefix) {
                 *int_prefix = atoi(prefix);
+                prefix_given = 1;
                 free(prefix);
             }
         } else {
             host_name = strndup(cp, ip_end - cp);
-            *int_prefix = 128;
+            *int_prefix = 0; /* no prefix given: full length, set below */
         }
         ++ip_end;
     } else {
@@ -331,6 +333,14 @@ int sock_pton_with_prefix(const char *cp, struct sockaddr *sa,
 
     if (host_name)
         free(host_name);
+
+    if (!prefix_given) {
+        *int_prefix = (sa->sa_family == AF_INET) ? 32 : 128;
+    }
+
+    if (*int_prefix < 0) {
+        return -2;
+    }
 
     if ((sa->sa_family == AF_INET) && (*int_prefix > 32)) {
 
