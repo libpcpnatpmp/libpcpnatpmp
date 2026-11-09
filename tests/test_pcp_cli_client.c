@@ -400,6 +400,8 @@ static void test_map_options(void) {
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
         expect_exit_code(&result, 1);
+        TEST(contains_string(result.stderr_data,
+                             "Third party address must be another host's"));
         free_cli_run_result(&result);
     }
 
