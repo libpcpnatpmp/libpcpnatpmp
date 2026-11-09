@@ -169,6 +169,18 @@ int main(void) {
     flow = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                         IPPROTO_TCP, 3600, NULL);
     TEST(flow != NULL);
+    // drop what the earlier parts' clients left at the gateway
+    for (;;) {
+        struct timeval none = {0, 0};
+        fd_set fds;
+
+        FD_ZERO(&fds);
+        FD_SET(server, &fds);
+        if (select((int)server + 1, &fds, NULL, NULL, &none) <= 0) {
+            break;
+        }
+        recvfrom(server, (char *)buf, sizeof(buf), 0, NULL, NULL);
+    }
     requests = 0;
     for (i = 0; i < 4 * ATTEMPTS; i++) {
         struct timeval tout = {0, 5000};
