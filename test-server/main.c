@@ -60,6 +60,8 @@ static void print_usage(void) {
     printf("--app-bit \t  set application bit in SADSCP opcode response\n");
     printf("--ret-dscp\t  return DSCP value for SADSCP opcode\n");
     printf("--log-file \t  Log Requests to file \n");
+    printf("--announce #num \t  Send #num restart announcements (0-10) to\n"
+           "          \t   224.0.0.1:5350 and [ff02::1]:5350 at start\n");
 }
 
 #ifndef no_argument
@@ -90,6 +92,9 @@ int main(int argc, char *argv[]) {
     uint8_t app_bit = 0;
     uint8_t ret_dscp = 0;
     char *log_file = NULL;
+    uint8_t announce_count = 0;
+
+    memset(&server_info_storage, 0, sizeof(server_info_storage));
 
     {
         int c;
@@ -104,6 +109,7 @@ int main(int argc, char *argv[]) {
             {"app-bit", no_argument, 0, 0},
             {"ret-dscp", required_argument, 0, 0},
             {"log-file", required_argument, 0, 0},
+            {"announce", required_argument, 0, 0},
             {0, 0, 0, 0}};
 
         opterr = 0;
@@ -145,6 +151,16 @@ int main(int argc, char *argv[]) {
 
                 if (!strcmp(long_options[option_index].name, "log-file")) {
                     log_file = optarg;
+                }
+
+                if (!strcmp(long_options[option_index].name, "announce")) {
+                    int n = atoi(optarg);
+                    if (n < 0 || n > PCP_TEST_MAX_ANNOUNCE) {
+                        printf("--announce takes 0 to %d, not %d\n",
+                               PCP_TEST_MAX_ANNOUNCE, n);
+                        exit(1);
+                    }
+                    announce_count = (uint8_t)n;
                 }
 
                 if (!strcmp(long_options[option_index].name, "ip"))
@@ -214,6 +230,7 @@ int main(int argc, char *argv[]) {
     server_info_storage.epoch_time_start = time(NULL);
     server_info_storage.app_bit = app_bit;
     server_info_storage.ret_dscp = ret_dscp;
+    server_info_storage.announce_count = announce_count;
     if (log_file != NULL) {
         memcpy(&(server_info_storage.log_file[0]), log_file,
                min(strlen(log_file) + 1, MAX_LOG_FILE));
