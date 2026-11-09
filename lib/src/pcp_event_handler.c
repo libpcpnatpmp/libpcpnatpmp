@@ -71,6 +71,13 @@
 #ifndef PCP_MIN_ERROR_WAIT
 #define PCP_MIN_ERROR_WAIT 30
 #endif
+/* Longest mapping lifetime, in seconds, the client goes by: RFC 6887
+ * section 15 has a client treat an absurdly long assigned lifetime as a
+ * saner one, such as 24 hours, and renew accordingly, so a mapping is
+ * still kept up if the server removes it early. */
+#ifndef PCP_MAX_LIFETIME
+#define PCP_MAX_LIFETIME 86400
+#endif
 #define PCP_RT(rtprev)                                                         \
     ((rtprev = rtprev << 1),                                                   \
      (((8192 + (1024 - (rand() & 2047))) *                                     \
@@ -609,14 +616,16 @@ typedef char pcp_time_t_must_be_signed_32_or_64_bits
          ? 1
          : -1];
 
-static time_t response_lifetime_end(const pcp_recv_msg_t *msg) {
+// When a response's lifetime of `lifetime` seconds ends.
+static time_t response_lifetime_end(const pcp_recv_msg_t *msg,
+                                    uint32_t lifetime) {
     const int64_t time_max =
         sizeof(time_t) == sizeof(int32_t) ? INT32_MAX : INT64_MAX;
 
-    if ((int64_t)msg->received_time > time_max - (int64_t)msg->recv_lifetime) {
+    if ((int64_t)msg->received_time > time_max - (int64_t)lifetime) {
         return (time_t)time_max;
     }
-    return (time_t)((int64_t)msg->received_time + msg->recv_lifetime);
+    return (time_t)((int64_t)msg->received_time + lifetime);
 }
 
 static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
@@ -624,7 +633,8 @@ static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
     struct timeval ctv;
 
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
-    f->recv_lifetime = response_lifetime_end(msg);
+    f->recv_lifetime = response_lifetime_end(
+        msg, MIN(msg->recv_lifetime, (uint32_t)PCP_MAX_LIFETIME));
     if ((f->kd.operation == PCP_OPCODE_MAP) ||
         (f->kd.operation == PCP_OPCODE_PEER)) {
         f->map_peer.ext_ip = msg->assigned_ext_ip;
@@ -694,7 +704,7 @@ static pcp_flow_event_e fhndl_clear_timeouts(pcp_flow_t *f,
 static pcp_flow_event_e fhndl_failed(pcp_flow_t *f, pcp_recv_msg_t *msg) {
     // an error response's lifetime is how long the server will keep refusing
     if (msg && msg->recv_result != PCP_RES_SUCCESS) {
-        f->recv_lifetime = response_lifetime_end(msg);
+        f->recv_lifetime = response_lifetime_end(msg, msg->recv_lifetime);
     }
 
     return fhndl_clear_timeouts(f, msg);
