@@ -39,6 +39,7 @@ set (TEST_FLOW_NOTIFY_SOURCES
 )
 add_executable (test_flow_notify ${TEST_FLOW_NOTIFY_SOURCES})
 add_executable (test_event_handler test_event_handler.c)
+add_executable (test_epoch_check test_epoch_check.c)
 add_executable (test_gateway test_gateway.c)
 set (TEST_LIFETIME_RENEWAL_SOURCES
     test_lifetime_renewal.c
@@ -113,6 +114,7 @@ add_executable (test_version_negotiation ${TEST_VERSION_NEGOTIATION_SOURCES})
 
 target_link_libraries (test_flow_notify pcpnatpmp)
 target_link_libraries (test_event_handler pcpnatpmp)
+target_link_libraries (test_epoch_check pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
@@ -144,6 +146,7 @@ target_compile_definitions (test_pcp_server PRIVATE
 )
 
 register_pcp_test (test_event_handler)
+register_pcp_test (test_epoch_check)
 register_pcp_test (test_flow_notify)
 register_pcp_test (test_gateway)
 register_pcp_test (test_lifetime_renewal)

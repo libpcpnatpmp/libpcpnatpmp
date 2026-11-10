@@ -446,6 +446,11 @@ void pcp_db_free_pcp_servers(pcp_ctx_t *ctx) {
             run_server_state_machine(s, pcpe_terminate);
         }
         pcp_socket_close_announce(s);
+        if (s->epoch_check_msg) {
+            pcp_flow_clear_msg_buf(s->epoch_check_msg);
+            free(s->epoch_check_msg);
+            s->epoch_check_msg = NULL;
+        }
     }
     free(ctx->pcp_db.pcp_servers);
     ctx->pcp_db.pcp_servers = NULL;

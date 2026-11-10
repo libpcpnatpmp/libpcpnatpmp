@@ -12,6 +12,7 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_server \
                  test_gw \
                  test_event_handler \
+                 test_epoch_check \
                  test_lifetime_renewal \
                  test_pcp_client_db \
                  test_pcp_api \
@@ -73,6 +74,10 @@ test_pcp_client_peer_opcode_LDFLAGS = -static
 test_event_handler_SOURCES = test_event_handler.c
 test_event_handler_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_event_handler_LDFLAGS = -static
+
+test_epoch_check_SOURCES = test_epoch_check.c
+test_epoch_check_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_epoch_check_LDFLAGS = -static
 
 test_lifetime_renewal_SOURCES = test_lifetime_renewal.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_lifetime_renewal_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
