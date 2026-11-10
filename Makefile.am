@@ -79,6 +79,7 @@ TESTS = tests/test_flow_notify \
         tests/test_ping_gws \
         tests/test_pcp_client_db \
         tests/test_pcp_api \
+        tests/test_natpmp_retransmit \
         tests/test_pcp_cli_client \
         tests/test_pcp_cli_nonce \
         tests/test_pcp_server \

@@ -16,6 +16,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef WIN32
+#include <winsock2.h>
+
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
 
 #include "pcp_socket.h"
 #include "test_macro.h"
@@ -251,6 +261,8 @@ static void test_ipv4_server_cases(void) {
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
         expect_exit_code(&result, 4);
+        TEST(contains_string(result.stdout_data,
+                             "The server answered with result code 3."));
         free_cli_run_result(&result);
     }
 
@@ -294,6 +306,40 @@ static void test_ipv4_server_cases(void) {
         expect_exit_code(&result, 0);
         free_cli_run_result(&result);
     }
+}
+
+// A server that never answers: the library gives up after its 10 s limit,
+// within the CLI's 12 s wait, and the CLI says no result code came. The
+// server is a socket on a port the system picks, which is never read.
+static void test_silent_server(void) {
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+    char server_arg[32];
+    PCP_SOCKET silent;
+    cli_run_result_t result;
+
+    PD_SOCKET_STARTUP();
+    silent = socket(AF_INET, SOCK_DGRAM, 0);
+    TEST(silent != PCP_INVALID_SOCKET);
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+    TEST(bind(silent, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    TEST(getsockname(silent, (struct sockaddr *)&addr, &len) == 0);
+    snprintf(server_arg, sizeof(server_arg), "127.0.0.1:%d",
+             ntohs(addr.sin_port));
+    {
+        char *argv[] = {
+            "pcpnatpmpc",    "--server", server_arg,  "--disable-autodiscovery",
+            "--pcp-version", "2",        "--timeout", "12",
+            "--internal",    ":1234"};
+
+        result = run_cli((int)(sizeof(argv) / sizeof(argv[0])), argv);
+    }
+    expect_exit_code(&result, 4);
+    TEST(contains_string(result.stdout_data, "No result code from the server"));
+    free_cli_run_result(&result);
+    CLOSE(silent);
 }
 
 static void test_ipv6_server_cases(void) {
@@ -424,6 +470,7 @@ int main(void) {
     test_invalid_inputs();
     test_timeout_and_parse_cases();
     test_ipv4_server_cases();
+    test_silent_server();
     test_ipv6_server_cases();
     test_map_options();
 

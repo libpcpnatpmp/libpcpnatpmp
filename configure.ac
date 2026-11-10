@@ -178,10 +178,9 @@ fi
 AM_CONDITIONAL([PCP_USE_IPV6_SOCKET],[test "x$enable_ipv6" = "xyes"])
 
 AC_DEFINE([PCP_SERVER_PORT], 5351, [Default PCP server port])
-AC_DEFINE([PCP_MAX_PING_COUNT], 3, [Maximum number of ping attempts])
 AC_DEFINE([PCP_SERVER_DISCOVERY_RETRY_DELAY], 3600, [Server discovery retry delay])
 AC_DEFINE([PCP_RETX_IRT], 3000, [Initial retransmission time])
-AC_DEFINE([PCP_RETX_MRC], 3, [Maximum retransmission count (0 indicates no maximum)])
+AC_DEFINE([PCP_RETX_MRC], 0, [Maximum retransmission count (0 indicates no maximum)])
 AC_DEFINE([PCP_RETX_MRT], 1024000, [Maximum retransmission time])
 AC_DEFINE([PCP_RETX_MRD], 0, [Maximum retransmission duration (0 indicates no maximum)])
 

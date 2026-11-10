@@ -319,6 +319,25 @@ static const char *decode_fresult(pcp_fstate_e s) {
     }
 }
 
+// Says why a flow failed: the server's result code, or none. A flow fails
+// without one when the server did not answer and also when its request could
+// not be sent; the log tells the two apart.
+static void print_failure_reason(pcp_flow_t *f) {
+    size_t cnt = 0;
+    pcp_flow_info_t *info = pcp_flow_get_info(f, &cnt);
+
+    if (info && cnt > 0) {
+        if (info[0].pcp_result_code == 0) {
+            printf("No result code from the server: it did not answer, or "
+                   "the request could not be sent.\n");
+        } else {
+            printf("The server answered with result code %u.\n",
+                   info[0].pcp_result_code);
+        }
+    }
+    free(info);
+}
+
 static int check_flow_info(pcp_flow_t *f) {
     size_t cnt = 0;
     pcp_flow_info_t *info_buf = NULL;
@@ -337,6 +356,7 @@ static int check_flow_info(pcp_flow_t *f) {
             break;
         case pcp_state_failed:
             printf("\nFlow signaling failed.\n");
+            print_failure_reason(f);
             ret_val = 4;
             break;
         default:
@@ -654,6 +674,7 @@ int main(int argc, char *argv[]) {
         break;
     case pcp_state_failed:
         printf("\nFlow signaling failed.\n");
+        print_failure_reason(flow);
         ret_val = 4;
         break;
     default:
