@@ -184,6 +184,7 @@ static const char *dbg_get_event_name(pcp_flow_event_e ev) {
         "fev_res_cant_provide_ext",
         "fev_res_address_mismatch",
         "fev_res_exc_remote_peers",
+        "fev_res_unknown",
     };
 
     assert(((int)ev < sizeof(event_names) / sizeof(event_names[0])));
@@ -322,18 +323,23 @@ pcp_flow_state_events_t flow_events_sm[] = {
     //                  Long lifetime Error Responses from PCP server
     {pfs_wait_resp, fev_res_not_authorized, pfs_failed},
     {pfs_wait_resp, fev_res_malformed_request, pfs_failed},
+    {pfs_wait_resp, fev_res_malformed_option, pfs_failed},
     {pfs_wait_resp, fev_res_unsupp_opcode, pfs_failed},
     {pfs_wait_resp, fev_res_unsupp_option, pfs_failed},
     {pfs_wait_resp, fev_res_unsupp_protocol, pfs_failed},
     {pfs_wait_resp, fev_res_cant_provide_ext, pfs_failed},
     {pfs_wait_resp, fev_res_address_mismatch, pfs_failed},
+    // RFC 6887 section 8.3: any result code other than SUCCESS is a failure
+    {pfs_wait_resp, fev_res_unknown, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_not_authorized, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_malformed_request, pfs_failed},
+    {pfs_wait_for_lifetime_renew, fev_res_malformed_option, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_unsupp_opcode, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_unsupp_option, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_unsupp_protocol, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_cant_provide_ext, pfs_failed},
     {pfs_wait_for_lifetime_renew, fev_res_address_mismatch, pfs_failed},
+    {pfs_wait_for_lifetime_renew, fev_res_unknown, pfs_failed},
 };
 
 #define FLOW_EVENTS_SM_COUNT (sizeof(flow_events_sm) / sizeof(*flow_events_sm))
@@ -850,7 +856,11 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
     PCP_LOG(PCP_LOGLVL_INFO, "Found matching flow %d to received PCP message.",
             f->key_bucket);
 
-    handle_flow_event(f, FEV_RES_BEGIN + msg->recv_result, msg);
+    handle_flow_event(f,
+                      msg->recv_result <= PCP_RES_EXCESSIVE_REMOTE_PEERS
+                          ? (pcp_flow_event_e)(FEV_RES_BEGIN + msg->recv_result)
+                          : fev_res_unknown,
+                      msg);
 
     return f;
 }
