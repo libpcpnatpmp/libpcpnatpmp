@@ -145,22 +145,29 @@
     } while (0)
 
 #include "pcp_msg.h"
+// Epoch check of RFC 6887 section 8.5, against the previous response from
+// the server; returns nonzero when the Epoch Time is invalid, a sign that the
+// server lost its mappings. The server's clock may step back by up to one
+// second, from reordering. Every response becomes the next one's reference.
 static inline int compare_epochs(pcp_recv_msg_t *f, pcp_server_t *s) {
-    uint32_t c_delta;
-    uint32_t s_delta;
+    int64_t c_delta;
+    int64_t s_delta;
+    int invalid;
 
     if (s->epoch == ~0u) {
-        s->epoch = f->recv_epoch;
-        s->cepoch = f->received_time;
+        invalid = 0;
+    } else {
+        c_delta = (int64_t)f->received_time - (int64_t)s->cepoch;
+        s_delta = (int64_t)f->recv_epoch - (int64_t)s->epoch;
+        PCP_LOG(PCP_LOGLVL_DEBUG,
+                "Epoch - client delta = %lld, server delta = %lld",
+                (long long)c_delta, (long long)s_delta);
+        invalid = s_delta < -1 || c_delta + 2 < s_delta - s_delta / 16 ||
+                  s_delta + 2 < c_delta - c_delta / 16;
     }
-    c_delta = (uint32_t)(f->received_time - s->cepoch);
-    s_delta = f->recv_epoch - s->epoch;
-
-    PCP_LOG(PCP_LOGLVL_DEBUG, "Epoch - client delta = %u, server delta = %u",
-            c_delta, s_delta);
-
-    return (c_delta + 2 < s_delta - (s_delta >> 4)) ||
-           (s_delta + 2 < c_delta - (c_delta >> 4));
+    s->epoch = f->recv_epoch;
+    s->cepoch = f->received_time;
+    return invalid;
 }
 
 inline static void timeval_align(struct timeval *x) {

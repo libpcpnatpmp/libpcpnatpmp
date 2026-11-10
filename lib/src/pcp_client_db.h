@@ -237,6 +237,12 @@ struct pcp_server {
     // re-sending after a restart is waiting for restart_resend_at
     uint8_t restart_pending;
     struct timeval restart_resend_at;
+    // when to ask for the server's epoch (0: not planned), and the request;
+    // see PCP_EPOCH_CHECK_S
+    struct timeval epoch_check_at;
+    pcp_flow_t *epoch_check_msg;
+    // when the server last answered anything (0: never)
+    time_t last_response;
     void *app_data;
 };
 

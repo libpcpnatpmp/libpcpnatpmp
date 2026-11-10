@@ -33,6 +33,18 @@
 #define PCP_RESTART_MAX_DELAY_MS 5000
 #endif
 
+/* When nothing the client keeps with a server is due for more than
+ * PCP_EPOCH_CHECK_AFTER_S seconds, the client asks the server for its epoch
+ * (an ANNOUNCE, or NAT-PMP's external address request) after
+ * PCP_EPOCH_CHECK_S seconds, give or take 20 %, so a restart that lost the
+ * client's mappings shows before the next renewal. */
+#ifndef PCP_EPOCH_CHECK_AFTER_S
+#define PCP_EPOCH_CHECK_AFTER_S 1200
+#endif
+#ifndef PCP_EPOCH_CHECK_S
+#define PCP_EPOCH_CHECK_S 600
+#endif
+
 typedef enum {
     pfs_any = -1,
     pfs_idle = 0,

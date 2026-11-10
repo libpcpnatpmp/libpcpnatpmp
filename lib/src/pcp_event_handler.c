@@ -824,6 +824,15 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
     f = pcp_get_flow(&msg->kd, s);
 #endif
 
+    // an ANNOUNCE reply, to send_epoch_check() or a server's announcement,
+    // belongs to no flow; its epoch is what counts
+    if (!f && msg->kd.operation == PCP_OPCODE_ANNOUNCE) {
+        PCP_LOG(PCP_LOGLVL_DEBUG,
+                "ANNOUNCE reply from server %s: no flow, epoch only",
+                s->pcp_server_paddr);
+        return NULL;
+    }
+
     if (!f) {
         char in6[INET6_ADDRSTRLEN];
 
@@ -1238,8 +1247,6 @@ static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s) {
     f = server_process_rcvd_pcp_msg(s, msg);
 
     if (compare_epochs(msg, s)) {
-        s->epoch = msg->recv_epoch;
-        s->cepoch = msg->received_time;
         gettimeofday(&s->next_timeout, NULL);
         s->restart_flow_msg = f;
 
@@ -1251,12 +1258,97 @@ static pcp_server_state_e handle_wait_io_receive_msg(pcp_server_t *s) {
     return pss_wait_io_calc_nearest_timeout;
 }
 
+struct earliest_timeout_data {
+    pcp_server_t *s;
+    struct timeval earliest; // 0: none of the server's flows has a timeout
+};
+
+static int earliest_timeout_iter(pcp_flow_t *f, void *data) {
+    struct earliest_timeout_data *d = (struct earliest_timeout_data *)data;
+
+    if (f->pcp_server_indx != d->s->index ||
+        (f->timeout.tv_sec == 0 && f->timeout.tv_usec == 0)) {
+        return 0;
+    }
+    if ((d->earliest.tv_sec == 0 && d->earliest.tv_usec == 0) ||
+        timeval_comp(&f->timeout, &d->earliest) < 0) {
+        d->earliest = f->timeout;
+    }
+    return 0;
+}
+
+// Asks the server for its epoch, which its answer carries: an ANNOUNCE, or
+// for NAT-PMP the external address request. Its reply goes through the
+// restart check like any other.
+static void send_epoch_check(pcp_server_t *s) {
+    struct flow_key_data kd;
+
+    // the server's current source address, which may have changed
+    memset(&kd, 0, sizeof(kd));
+    memcpy(&kd.src_ip, s->src_ip, sizeof(kd.src_ip));
+    memcpy(&kd.pcp_server_ip, s->pcp_ip, sizeof(kd.pcp_server_ip));
+    memcpy(&kd.nonce, &s->nonce, sizeof(kd.nonce));
+    kd.operation = PCP_OPCODE_ANNOUNCE;
+    if (!s->epoch_check_msg) {
+        // not in the flow database: it is the server's, not a mapping
+        s->epoch_check_msg = pcp_create_flow(s, &kd);
+        if (!s->epoch_check_msg) {
+            return;
+        }
+    }
+    s->epoch_check_msg->kd = kd;
+    pcp_flow_clear_msg_buf(s->epoch_check_msg);
+    PCP_LOG(PCP_LOGLVL_INFO, "Asking server %s for its epoch",
+            s->pcp_server_paddr);
+    pcp_flow_send_msg(s->epoch_check_msg, s);
+}
+
+// Plans an epoch check when nothing of the server's flows is due for more
+// than PCP_EPOCH_CHECK_AFTER_S, and wakes for one already planned.
+static void plan_epoch_check(pcp_server_t *s) {
+    struct earliest_timeout_data d = {s, {0, 0}};
+    struct timeval now;
+
+    pcp_db_foreach_flow(s->ctx, earliest_timeout_iter, &d);
+    if (d.earliest.tv_sec == 0 && d.earliest.tv_usec == 0) {
+        // nothing kept with the server to lose in a restart
+        s->epoch_check_at.tv_sec = 0;
+        s->epoch_check_at.tv_usec = 0;
+        return;
+    }
+    gettimeofday(&now, NULL);
+    if (s->epoch_check_at.tv_sec == 0 && s->epoch_check_at.tv_usec == 0) {
+        uint32_t ms;
+
+        if (d.earliest.tv_sec - now.tv_sec <= PCP_EPOCH_CHECK_AFTER_S) {
+            return;
+        }
+        // PCP_EPOCH_CHECK_S, give or take 20 %
+        ms = PCP_EPOCH_CHECK_S * 800 +
+             random_below(s->ctx, PCP_EPOCH_CHECK_S * 400 + 1);
+        s->epoch_check_at = now;
+        s->epoch_check_at.tv_sec += ms / 1000;
+        s->epoch_check_at.tv_usec += (ms % 1000) * 1000;
+        timeval_align(&s->epoch_check_at);
+    }
+    if ((s->next_timeout.tv_sec == 0 && s->next_timeout.tv_usec == 0) ||
+        timeval_comp(&s->epoch_check_at, &s->next_timeout) < 0) {
+        s->next_timeout = s->epoch_check_at;
+    }
+}
+
 static pcp_server_state_e handle_wait_io_timeout(pcp_server_t *s) {
     struct timeval ctv;
 
     gettimeofday(&ctv, NULL);
     if (s->restart_pending && timeval_comp(&s->restart_resend_at, &ctv) <= 0) {
         resend_after_restart(s);
+    }
+    if ((s->epoch_check_at.tv_sec != 0 || s->epoch_check_at.tv_usec != 0) &&
+        timeval_comp(&s->epoch_check_at, &ctv) <= 0) {
+        s->epoch_check_at.tv_sec = 0;
+        s->epoch_check_at.tv_usec = 0;
+        send_epoch_check(s);
     }
 
     s->next_timeout.tv_sec = 0;
@@ -1278,6 +1370,8 @@ static pcp_server_state_e handle_wait_io_timeout(pcp_server_t *s) {
         s->next_timeout = s->restart_resend_at;
     }
 
+    plan_epoch_check(s);
+
     return pss_wait_io;
 }
 
@@ -1291,6 +1385,9 @@ static pcp_server_state_e handle_server_set_not_working(pcp_server_t *s) {
             s->pcp_server_paddr, PCP_SERVER_DISCOVERY_RETRY_DELAY / 60);
 
     pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);
+    // a server found working again plans its own
+    s->epoch_check_at.tv_sec = 0;
+    s->epoch_check_at.tv_usec = 0;
 
     gettimeofday(&s->next_timeout, NULL);
     s->next_timeout.tv_sec += PCP_SERVER_DISCOVERY_RETRY_DELAY;
@@ -1546,6 +1643,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout) {
 
         if (s) {
             PCP_LOG(PCP_LOGLVL_DEBUG, "Found server: %s", s->pcp_server_paddr);
+            s->last_response = msg->received_time;
             msg->pcp_server_indx = s->index;
             memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
             pcp_fill_in6_addr(&msg->kd.src_ip, NULL, &msg->kd.scope_id,
