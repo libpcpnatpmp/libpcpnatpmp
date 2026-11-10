@@ -622,8 +622,11 @@ int main(int argc, char *argv[]) {
                                     (uint8_t)p.opt_filter_prefix);
         }
 
-        if (p.opt_pfailure) {
-            pcp_flow_set_prefer_failure_opt(flow);
+        if (p.opt_pfailure &&
+            pcp_flow_set_prefer_failure_opt(flow) != PCP_ERR_SUCCESS) {
+            fprintf(stderr, "Prefer failure option needs a suggested "
+                            "external port!\n");
+            exit(1);
         }
 
         if (p.opt_thirdparty_addr) {

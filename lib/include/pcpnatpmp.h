@@ -232,9 +232,11 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                              uint8_t filter_prefix);
 
 /*
- * Append prefer failure option.
+ * Append prefer failure option. Valid only for a MAP flow with a suggested
+ * external port; for any other flow, returns PCP_ERR_BAD_ARGS and leaves
+ * the flow unchanged.
  */
-void pcp_flow_set_prefer_failure_opt(pcp_flow_t *f);
+pcp_errno pcp_flow_set_prefer_failure_opt(pcp_flow_t *f);
 
 #ifdef PCP_SADSCP
 /*

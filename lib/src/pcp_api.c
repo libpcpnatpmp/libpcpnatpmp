@@ -627,8 +627,21 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
     }
 }
 
-void pcp_flow_set_prefer_failure_opt(pcp_flow_t *f) {
+pcp_errno pcp_flow_set_prefer_failure_opt(pcp_flow_t *f) {
     pcp_flow_t *fiter;
+
+    // RFC 6887 section 13.2: PREFER_FAILURE is valid only in a MAP request
+    // that suggests an external port
+    if (!f || f->kd.operation != PCP_OPCODE_MAP) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                "PREFER_FAILURE can be added only to a MAP flow.");
+        return PCP_ERR_BAD_ARGS;
+    }
+    if (f->map_peer.ext_port == 0) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                "PREFER_FAILURE needs a suggested external port.");
+        return PCP_ERR_BAD_ARGS;
+    }
 
     for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
         if (!fiter->pfailure_option_present) {
@@ -636,6 +649,7 @@ void pcp_flow_set_prefer_failure_opt(pcp_flow_t *f) {
             pcp_flow_updated(fiter);
         }
     }
+    return PCP_ERR_SUCCESS;
 }
 #ifdef PCP_EXPERIMENTAL
 int pcp_flow_set_userid(pcp_flow_t *f, pcp_userid_option_p user) {

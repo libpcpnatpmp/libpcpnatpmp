@@ -498,11 +498,11 @@ static void run_announce_scenario(int client_hears_announcements) {
     TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
     sock_pton("127.0.0.1:3004", (struct sockaddr *)&src);
     sock_pton("8.8.8.8:4444", (struct sockaddr *)&filter_ip);
-    flow = pcp_new_flow(ctx, (struct sockaddr *)&src, NULL, NULL, IPPROTO_TCP,
-                        3600, NULL);
+    flow = pcp_new_flow(ctx, (struct sockaddr *)&src, NULL,
+                        Sock_pton("0.0.0.0:3004"), IPPROTO_TCP, 3600, NULL);
     TEST(flow != NULL);
     pcp_flow_set_filter_opt(flow, (struct sockaddr *)&filter_ip, 32);
-    pcp_flow_set_prefer_failure_opt(flow);
+    TEST(pcp_flow_set_prefer_failure_opt(flow) == PCP_ERR_SUCCESS);
     TEST(pcp_wait(flow, 3000, 0) == pcp_state_succeeded);
     if (!client_hears_announcements) {
         sock_pton("127.0.0.1:3005", (struct sockaddr *)&src);

@@ -357,11 +357,24 @@ static void test_map_options(void) {
         config.server_port = "55357";
         build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
                          config.server_port);
+        char *argv[] = {"pcpnatpmpc", "-d", "-s",    server_arg, "-i",
+                        ":1234",      "-e", ":5678", "-P"};
+        result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
+                                      argv, &config, 1);
+        TEST(result.exit_code == 0);
+        free_cli_run_result(&result);
+    }
+
+    {
+        // PREFER_FAILURE without a suggested external port
+        config.server_port = "55357";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
         char *argv[] = {"pcpnatpmpc", "-d",    "-s", server_arg,
                         "-i",         ":1234", "-P"};
         result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
                                       argv, &config, 1);
-        TEST(result.exit_code == 0);
+        expect_exit_code(&result, 1);
         free_cli_run_result(&result);
     }
 
