@@ -29,7 +29,7 @@
 int main(void) {
     pcp_flow_t *f1, *f2;
     pcp_ctx_t *ctx;
-    struct sockaddr_storage internal, suggested;
+    struct sockaddr_storage internal, suggested, no_family;
     struct sockaddr_storage int_port0, int_port1, peer_port0, peer_port1;
     struct sockaddr_storage int6, peer6;
 
@@ -143,6 +143,38 @@ int main(void) {
     TEST(pcp_flow_set_prefer_failure_opt(f2) == PCP_ERR_SUCCESS);
     TEST(pcp_flow_set_prefer_failure_opt(f2) == PCP_ERR_SUCCESS);
     TEST(f2->pfailure_option_present == 1);
+    // THIRD_PARTY names another host, never the flow's own source address
+    TEST(pcp_flow_set_3rd_party_opt(NULL, Sock_pton("192.0.2.5")) ==
+         PCP_ERR_BAD_ARGS);
+    TEST(pcp_flow_set_3rd_party_opt(f2, NULL) == PCP_ERR_BAD_ARGS);
+    memset(&no_family, 0, sizeof(no_family));
+    no_family.ss_family = AF_UNSPEC;
+    TEST(pcp_flow_set_3rd_party_opt(f2, (struct sockaddr *)&no_family) ==
+         PCP_ERR_BAD_ARGS);
+    TEST(pcp_flow_set_3rd_party_opt(f2, Sock_pton("127.0.0.1")) ==
+         PCP_ERR_BAD_ARGS);
+    TEST(f2->third_party_option_present == 0);
+    TEST(pcp_flow_set_3rd_party_opt(f2, Sock_pton("192.0.2.5")) ==
+         PCP_ERR_SUCCESS);
+    TEST(f2->third_party_option_present == 1);
+    // a flow from 0.0.0.0 takes the address that reaches its server, here
+    // 127.0.0.1, and THIRD_PARTY may not name that address either
+    {
+        pcp_flow_t *any;
+
+        TEST((any = pcp_new_flow(ctx, Sock_pton("0.0.0.0:1235"), NULL, NULL,
+                                 IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(pcp_flow_set_3rd_party_opt(any, Sock_pton("127.0.0.1")) ==
+             PCP_ERR_BAD_ARGS);
+        TEST(any->third_party_option_present == 0);
+        // only MAP and PEER carry THIRD_PARTY; an ANNOUNCE ping does not
+        any->kd.operation = PCP_OPCODE_ANNOUNCE;
+        TEST(pcp_flow_set_3rd_party_opt(any, Sock_pton("192.0.2.5")) ==
+             PCP_ERR_BAD_ARGS);
+        TEST(any->third_party_option_present == 0);
+        any->kd.operation = PCP_OPCODE_MAP;
+        pcp_delete_flow(any);
+    }
 
     pcp_flow_set_lifetime(f1, 1000);
     TEST((f1->lifetime) >= 99);

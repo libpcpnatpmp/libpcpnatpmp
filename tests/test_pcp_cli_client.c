@@ -391,6 +391,21 @@ static void test_map_options(void) {
     }
 
     {
+        // THIRD_PARTY with the client's own address
+        config.server_port = "55361";
+        build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
+                         config.server_port);
+        char *argv[] = {"pcpnatpmpc",     "-d", "-s",       server_arg, "-i",
+                        "127.0.0.1:1234", "-3", "127.0.0.1"};
+        result = run_cli_with_servers((int)(sizeof(argv) / sizeof(argv[0])),
+                                      argv, &config, 1);
+        expect_exit_code(&result, 1);
+        TEST(contains_string(result.stderr_data,
+                             "Third party address must be another host's"));
+        free_cli_run_result(&result);
+    }
+
+    {
         config.server_port = "55359";
         build_server_arg(server_arg, sizeof(server_arg), "127.0.0.1",
                          config.server_port);
