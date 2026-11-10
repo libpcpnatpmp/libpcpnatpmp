@@ -45,7 +45,8 @@
 
 // Binds `ip`:`*port`, or a port the system picks if `*port` is 0, so tests
 // running at the same time do not collide; `*port` gets the bound port.
-static PCP_SOCKET open_socket(const char *ip, int *port) {
+// Returns PCP_INVALID_SOCKET if `ip` cannot be bound.
+static PCP_SOCKET try_open_socket(const char *ip, int *port) {
     struct sockaddr_in addr;
     socklen_t len = sizeof(addr);
     PCP_SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -55,9 +56,19 @@ static PCP_SOCKET open_socket(const char *ip, int *port) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons((uint16_t)*port);
     inet_pton(AF_INET, ip, &addr.sin_addr);
-    TEST(bind(sock, (struct sockaddr *)&addr, sizeof(addr)) == 0);
+    if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        CLOSE(sock);
+        return PCP_INVALID_SOCKET;
+    }
     TEST(getsockname(sock, (struct sockaddr *)&addr, &len) == 0);
     *port = ntohs(addr.sin_port);
+    return sock;
+}
+
+static PCP_SOCKET open_socket(const char *ip, int *port) {
+    PCP_SOCKET sock = try_open_socket(ip, port);
+
+    TEST(sock != PCP_INVALID_SOCKET);
     return sock;
 }
 
@@ -139,7 +150,8 @@ int main(void) {
     PD_SOCKET_STARTUP();
     server = open_socket("127.0.0.1", &port);
     other_port = open_socket("127.0.0.1", &unused);
-    other_addr = open_socket("127.0.0.2", &port);
+    // macOS has only 127.0.0.1 on loopback; that case is skipped there
+    other_addr = try_open_socket("127.0.0.2", &port);
     ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
     snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", port);
     TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
@@ -156,11 +168,16 @@ int main(void) {
     TEST(warnings > 0);
 
     // from the server's port, but not from its address
-    send_success(other_addr, req, &client, HEADER_LEN + MAP_LEN);
-    warnings = 0;
-    pump(ctx, server, 200, req, sizeof(req), &client);
-    TEST(flow_result(flow) != pcp_state_succeeded);
-    TEST(warnings > 0);
+    if (other_addr != PCP_INVALID_SOCKET) {
+        send_success(other_addr, req, &client, HEADER_LEN + MAP_LEN);
+        warnings = 0;
+        pump(ctx, server, 200, req, sizeof(req), &client);
+        TEST(flow_result(flow) != pcp_state_succeeded);
+        TEST(warnings > 0);
+    } else {
+        printf("127.0.0.2 cannot be bound here; skipping the response from "
+               "another address\n");
+    }
 
     // not a multiple of 4 octets
     send_success(server, req, &client, HEADER_LEN + MAP_LEN + 2);
@@ -183,7 +200,9 @@ int main(void) {
     TEST(flow_result(flow) == pcp_state_succeeded);
 
     pcp_terminate(ctx, 0);
-    CLOSE(other_addr);
+    if (other_addr != PCP_INVALID_SOCKET) {
+        CLOSE(other_addr);
+    }
     CLOSE(other_port);
     CLOSE(server);
     PD_SOCKET_CLEANUP();
