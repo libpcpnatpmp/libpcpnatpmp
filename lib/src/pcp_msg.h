@@ -48,4 +48,9 @@ void parse_response_hdr(pcp_recv_msg_t f);
 
 pcp_errno parse_response(pcp_recv_msg_t *f);
 
+/* whether the response carries this FILTER option. A success response holds
+ * the options the server processed (RFC 6887 section 7.3) */
+int pcp_msg_has_filter(const pcp_recv_msg_t *msg,
+                       const struct pcp_flow_filter *filter);
+
 #endif /* PCP_MSG_H_ */

@@ -659,11 +659,12 @@ static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
     }
     f->recv_result = msg->recv_result;
 
-    /* the server has the FILTER options of the request. If the flow has more
-     * than fit in one request, send the next ones now instead of with the
-     * renewal; only when that request carried some, so a request with no
-     * room for any does not repeat forever */
-    if (pcp_flow_filters_confirmed(f) && msg->recv_lifetime != 0 &&
+    /* the server has the FILTER options the response holds. Send the flow's
+     * other ones now instead of with the renewal: more than fit in one
+     * request, or ones only a newer request carried. Only when the response
+     * held some, so a request with no room for any, or a server that leaves
+     * them out of its responses, does not repeat forever */
+    if (pcp_flow_filters_confirmed(f, msg) && msg->recv_lifetime != 0 &&
         pcp_flow_filters_pending(f)) {
         PCP_LOG_END(PCP_LOGLVL_DEBUG);
         return fev_send;

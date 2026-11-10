@@ -101,6 +101,8 @@ typedef struct pcp_recv_msg {
     // msg buffer
     uint32_t pcp_msg_len;
     char pcp_msg_buffer[PCP_MAX_LEN];
+    // where the options start in pcp_msg_buffer, 0 if there are none
+    uint32_t options_offset;
 } pcp_recv_msg_t;
 
 struct pcp_ctx_s {
@@ -321,7 +323,7 @@ int pcp_flow_filters_in_request(const pcp_flow_t *f);
 
 /* a success reply arrived: the server has the filters of the last request.
  * Returns 1 if that request carried any FILTER option */
-int pcp_flow_filters_confirmed(pcp_flow_t *f);
+int pcp_flow_filters_confirmed(pcp_flow_t *f, const pcp_recv_msg_t *msg);
 
 /* 1 if the flow has a FILTER option (or a reset) the server has not accepted
  * yet and that its next request would carry */

@@ -33,6 +33,7 @@
 
 #include "pcp_client_db.h"
 #include "pcp_logger.h"
+#include "pcp_msg.h"
 #include "pcp_msg_structs.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
@@ -164,22 +165,36 @@ int pcp_flow_filters_refused(pcp_flow_t *f) {
     return 1;
 }
 
-int pcp_flow_filters_confirmed(pcp_flow_t *f) {
+/* a success response holds the options the server processed (RFC 6887
+ * section 7.3). One that answers an earlier request, still in flight when
+ * this one was sent, lacks the filters only this one carried: those are sent
+ * again */
+int pcp_flow_filters_confirmed(pcp_flow_t *f, const pcp_recv_msg_t *msg) {
     uint16_t i;
     int confirmed = 0;
 
     if (f->filter_reset_sent) {
-        confirmed = 1;
-        f->filter_reset = 0;
+        struct pcp_flow_filter none;
+
+        memset(&none, 0, sizeof(none));
         f->filter_reset_sent = 0;
-        if (f->filter_count == 0) {
-            f->filter_sent = 0;
+        if (pcp_msg_has_filter(msg, &none)) {
+            confirmed = 1;
+            f->filter_reset = 0;
+            if (f->filter_count == 0) {
+                f->filter_sent = 0;
+            }
         }
     }
     for (i = 0; i < f->filter_count; i++) {
-        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+        if (f->filters[i].state != PCP_FILTER_IN_REQUEST) {
+            continue;
+        }
+        if (pcp_msg_has_filter(msg, &f->filters[i])) {
             f->filters[i].state = PCP_FILTER_CONFIRMED;
             confirmed = 1;
+        } else {
+            f->filters[i].state = PCP_FILTER_PENDING;
         }
     }
     /* accepted after a refusal of one more: that is the server's limit, and

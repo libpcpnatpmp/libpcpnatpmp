@@ -55,6 +55,24 @@ static int count_options(pcp_flow_t *f, uint8_t code, int *first_prefix) {
     return n;
 }
 
+/* the server's success response to the request in msg_buf: the request with
+ * the response header, holding every option, as the test server sends it */
+static void echo_response(pcp_recv_msg_t *msg, const char *msg_buf,
+                          uint32_t msg_len) {
+    memset(msg, 0, sizeof(*msg));
+    memcpy(msg->pcp_msg_buffer, msg_buf, msg_len);
+    msg->pcp_msg_len = msg_len;
+    TEST(parse_response(msg) == PCP_ERR_SUCCESS);
+}
+
+/* the server answers the last request of f with success */
+static int confirm_echo(pcp_flow_t *f) {
+    static pcp_recv_msg_t msg;
+
+    echo_response(&msg, f->pcp_msg_buffer, f->pcp_msg_len);
+    return pcp_flow_filters_confirmed(f, &msg);
+}
+
 int main(void) {
     pcp_flow_t *f1, *f2;
     pcp_ctx_t *ctx;
@@ -396,12 +414,12 @@ int main(void) {
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == n1);
         TEST(pcp_flow_filters_in_request(f3));
         // the server accepted them: the next request carries the rest
-        TEST(pcp_flow_filters_confirmed(f3));
+        TEST(confirm_echo(f3));
         TEST(!pcp_flow_filters_in_request(f3));
         TEST(pcp_flow_filters_accepted(f3) == n1);
         TEST(pcp_flow_filters_pending(f3));
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == 60 - n1);
-        TEST(pcp_flow_filters_confirmed(f3));
+        TEST(confirm_echo(f3));
         TEST(pcp_flow_filters_accepted(f3) == 60);
         TEST(!pcp_flow_filters_pending(f3));
         // a renewal carries no FILTER option, but the other options
@@ -412,9 +430,9 @@ int main(void) {
         // the server restarted: all of them go out again
         pcp_flow_filters_server_restarted(f3);
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == n1);
-        TEST(pcp_flow_filters_confirmed(f3));
+        TEST(confirm_echo(f3));
         TEST(count_options(f3, PCP_OPTION_FILTER, NULL) == 60 - n1);
-        TEST(pcp_flow_filters_confirmed(f3));
+        TEST(confirm_echo(f3));
         TEST(f3->filter_reset == 0);
         // a request that deletes the mapping carries none (RFC 6887 section
         // 13.3: the server answers MALFORMED_OPTION)
@@ -530,7 +548,7 @@ int main(void) {
         TEST(pcp_flow_filters_refused(f5));
         TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 3);
         TEST(f5->filter_server_limit == 0);
-        TEST(pcp_flow_filters_confirmed(f5));
+        TEST(confirm_echo(f5));
         TEST(f5->filter_server_limit == 3);
         TEST(pcp_flow_filters_accepted(f5) == 3);
         TEST(!pcp_flow_filters_pending(f5));
@@ -550,6 +568,57 @@ int main(void) {
         pcp_flow_filters_server_restarted(f5);
         TEST(f5->filter_server_limit == 0);
         TEST(count_options(f5, PCP_OPTION_FILTER, NULL) == 6);
+    }
+
+    // a success response holds the FILTER options the server processed: one
+    // that answers an earlier request confirms only the filters it carried
+    {
+        pcp_flow_t *f7;
+        static pcp_recv_msg_t first, none;
+        static char first_req[PCP_MAX_LEN];
+        uint32_t first_len;
+
+        TEST((f7 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1240"), NULL, NULL,
+                                IPPROTO_TCP, 100, NULL)) != NULL);
+        TEST(pcp_flow_set_filter_opt(f7, Sock_pton("10.4.0.1:80"), 32) ==
+             PCP_ERR_SUCCESS);
+        TEST(count_options(f7, PCP_OPTION_FILTER, NULL) == 1);
+        first_len = f7->pcp_msg_len;
+        memcpy(first_req, f7->pcp_msg_buffer, first_len);
+        // a second filter goes out while the first request is unanswered
+        TEST(pcp_flow_set_filter_opt(f7, Sock_pton("10.4.0.2:80"), 32) ==
+             PCP_ERR_SUCCESS);
+        TEST(count_options(f7, PCP_OPTION_FILTER, NULL) == 2);
+        // the answer to the first request: the second filter is sent again
+        echo_response(&first, first_req, first_len);
+        TEST(pcp_flow_filters_confirmed(f7, &first));
+        TEST(pcp_flow_filters_accepted(f7) == 1);
+        TEST(pcp_flow_filters_pending(f7));
+        TEST(count_options(f7, PCP_OPTION_FILTER, NULL) == 1);
+        TEST(confirm_echo(f7));
+        TEST(pcp_flow_filters_accepted(f7) == 2);
+        TEST(!pcp_flow_filters_pending(f7));
+
+        // a response without the options confirms none: they wait for the
+        // renewal, so the request is not sent again at once
+        TEST(pcp_flow_set_filter_opt(f7, Sock_pton("10.4.0.3:80"), 32) ==
+             PCP_ERR_SUCCESS);
+        TEST(count_options(f7, PCP_OPTION_FILTER, NULL) == 1);
+        echo_response(&none, first_req, first_len);
+        none.pcp_msg_len = none.options_offset;
+        TEST(!pcp_flow_filters_confirmed(f7, &none));
+        TEST(pcp_flow_filters_accepted(f7) == 2);
+        TEST(count_options(f7, PCP_OPTION_FILTER, NULL) == 1);
+
+        // a reset is done only when the response holds it
+        pcp_flow_set_filter_opt(f7, Sock_pton("10.4.0.1:80"), 0);
+        TEST(f7->filter_reset == 1);
+        count_options(f7, PCP_OPTION_FILTER, NULL);
+        TEST(!pcp_flow_filters_confirmed(f7, &none));
+        TEST(f7->filter_reset == 1);
+        count_options(f7, PCP_OPTION_FILTER, NULL);
+        TEST(confirm_echo(f7));
+        TEST(f7->filter_reset == 0);
     }
 
     // at the largest limit the count of filters cannot wrap: the next

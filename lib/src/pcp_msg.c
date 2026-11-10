@@ -589,9 +589,40 @@ int validate_pcp_msg(pcp_recv_msg_t *f) {
     return 1;
 }
 
-static pcp_errno parse_options(UNUSED pcp_recv_msg_t *f, UNUSED void *r) {
-    // TODO: implement parsing of pcp options
+static pcp_errno parse_options(pcp_recv_msg_t *f, void *r) {
+    f->options_offset = (uint32_t)((char *)r - f->pcp_msg_buffer);
     return PCP_ERR_SUCCESS;
+}
+
+int pcp_msg_has_filter(const pcp_recv_msg_t *msg,
+                       const struct pcp_flow_filter *filter) {
+    uint32_t off = msg->options_offset;
+
+    if (off == 0) {
+        return 0;
+    }
+    while (off + sizeof(pcp_options_hdr_t) <= msg->pcp_msg_len) {
+        const pcp_options_hdr_t *hdr =
+            (const pcp_options_hdr_t *)(msg->pcp_msg_buffer + off);
+        uint32_t len = ntohs(hdr->len);
+
+        if (off + sizeof(*hdr) + len > msg->pcp_msg_len) {
+            break;
+        }
+        if (hdr->code == PCP_OPTION_FILTER &&
+            sizeof(*hdr) + len >= sizeof(pcp_filter_option_t)) {
+            const pcp_filter_option_t *opt = (const pcp_filter_option_t *)hdr;
+
+            if (opt->filter_prefix == filter->prefix &&
+                opt->filter_peer_port == filter->port &&
+                memcmp(opt->filter_peer_ip, &filter->ip,
+                       sizeof(opt->filter_peer_ip)) == 0) {
+                return 1;
+            }
+        }
+        off += sizeof(*hdr) + len;
+    }
+    return 0;
 }
 
 static pcp_errno parse_v1_map(pcp_recv_msg_t *f, void *r) {
@@ -797,6 +828,7 @@ pcp_errno parse_response(pcp_recv_msg_t *f) {
     memset(&f->kd, 0, sizeof(f->kd));
 
     f->kd.operation = resp->r_opcode & 0x7f;
+    f->options_offset = 0;
 
     PCP_LOG(PCP_LOGLVL_DEBUG, "parse_response: version: %d", f->recv_version);
     PCP_LOG(PCP_LOGLVL_DEBUG, "parse_response: result: %d", f->recv_result);
