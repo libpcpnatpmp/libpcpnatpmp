@@ -1546,8 +1546,15 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout) {
                           (struct sockaddr *)&msg->rcvd_from_addr);
         PCP_LOG(PCP_LOGLVL_DEBUG, "SCOPE_ID: %u", scope_id);
         s = get_pcp_server_by_ip(ctx, &ip6, scope_id);
-        // RFC 6887 section 8.3: the source port must be the server's too
-        if (s && port != s->pcp_port) {
+        if (!s) {
+            char addr[INET6_ADDRSTRLEN];
+
+            PCP_LOG(PCP_LOGLVL_WARN,
+                    "Dropping a datagram from %s, which is no server's "
+                    "address.",
+                    inet_ntop(AF_INET6, &ip6, addr, sizeof(addr)));
+        } else if (port != s->pcp_port) {
+            // RFC 6887 section 8.3: the source port must be the server's too
             PCP_LOG(PCP_LOGLVL_WARN,
                     "Dropping a datagram from server %s's address but port "
                     "%hu.",

@@ -84,6 +84,16 @@ static int pump(pcp_ctx_t *ctx, PCP_SOCKET server, int ms, uint8_t *buf,
     return got;
 }
 
+// counts warnings, the level every dropped response is logged at
+static int warnings;
+
+static void count_warnings(pcp_loglvl_e level, const char *msg) {
+    (void)msg;
+    if (level == PCP_LOGLVL_WARN) {
+        warnings++;
+    }
+}
+
 // Answers the MAP request in `req` with success from `sock`, padded with
 // zero octets to `len` octets.
 static void send_success(PCP_SOCKET sock, const uint8_t *req,
@@ -124,7 +134,8 @@ int main(void) {
     pcp_ctx_t *ctx;
     pcp_flow_t *flow;
 
-    pcp_log_level = PCP_LOGLVL_NONE;
+    pcp_log_level = PCP_LOGLVL_WARN;
+    pcp_set_loggerfn(count_warnings);
     PD_SOCKET_STARTUP();
     server = open_socket("127.0.0.1", &port);
     other_port = open_socket("127.0.0.1", &unused);
@@ -139,23 +150,31 @@ int main(void) {
 
     // from the server's address, but not from its port
     send_success(other_port, req, &client, HEADER_LEN + MAP_LEN);
+    warnings = 0;
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(warnings > 0);
 
     // from the server's port, but not from its address
     send_success(other_addr, req, &client, HEADER_LEN + MAP_LEN);
+    warnings = 0;
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(warnings > 0);
 
     // not a multiple of 4 octets
     send_success(server, req, &client, HEADER_LEN + MAP_LEN + 2);
+    warnings = 0;
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(warnings > 0);
 
     // longer than 1100 octets
     send_success(server, req, &client, MAX_LEN + 4);
+    warnings = 0;
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_result(flow) != pcp_state_succeeded);
+    TEST(warnings > 0);
 
     // valid, and exactly 1100 octets; taking it also shows the source port
     // check compares the two ports in the same byte order
