@@ -21,6 +21,7 @@ check_PROGRAMS = test_server_restart \
                  test_pcp_msg \
                  test_server_reping \
                  test_error_lifetime \
+                 test_lifetime_cap \
                  test_short_error_wait \
                  test_multicast_announce
 
@@ -118,6 +119,10 @@ test_server_reping_LDFLAGS = -static
 test_error_lifetime_SOURCES = test_error_lifetime.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_error_lifetime_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
 test_error_lifetime_LDFLAGS = -static
+
+test_lifetime_cap_SOURCES = test_lifetime_cap.c $(TEST_PCP_SERVER_HELPER_SOURCES)
+test_lifetime_cap_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
+test_lifetime_cap_LDFLAGS = -static
 
 test_short_error_wait_SOURCES = test_short_error_wait.c $(TEST_PCP_SERVER_HELPER_SOURCES)
 test_short_error_wait_LDADD = $(top_builddir)/lib/libpcpnatpmp.la
