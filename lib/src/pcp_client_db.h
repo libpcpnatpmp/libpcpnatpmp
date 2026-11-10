@@ -229,7 +229,7 @@ struct pcp_server {
     uint32_t ping_count;
     struct timeval next_timeout;
     uint32_t natpmp_ext_addr;
-    // the library's socket is not on port 5350: listening there on this one
+    // listening for restart announcements on port 5350 on this socket
     uint8_t announce_listening;
     PCP_SOCKET announce_socket;
     struct in6_addr announce_src_ip;

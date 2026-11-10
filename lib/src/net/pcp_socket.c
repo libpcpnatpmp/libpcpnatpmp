@@ -57,12 +57,22 @@
 #include "pcp_utils.h"
 #include "unp.h"
 
-// Where a client on another port listens for restart announcements; see
+// Where a client listens for restart announcements; see
 // pcp_socket_listen_announce()
 #define PCP_ANNOUNCE_PORT 5350
 
 #ifdef PCP_ANNOUNCE_LISTENER
-// Lets another client's announce listener share port 5350 with this socket.
+/* The client's own port: 0, one the system picks at random, as RFC 6887
+ * (8.1) asks; restart announcements reach the separate listener on 5350. */
+#define CLIENT_FIRST_PORT 0
+#else
+/* Without the separate listener the client's socket is on 5350 to hear
+ * restart announcements itself, or the next free port after it. */
+#define CLIENT_FIRST_PORT PCP_ANNOUNCE_PORT
+#endif
+
+#ifdef PCP_ANNOUNCE_LISTENER
+// Lets other programs' announce listeners share port 5350 with this one.
 static int pcp_socket_share_port(PCP_SOCKET s) {
     int on = 1;
 
@@ -262,10 +272,10 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
     memset(&sas, 0, sizeof(sas));
     sas.ss_family = domain;
     if (domain == AF_INET) {
-        sin->sin_port = htons(5350);
+        sin->sin_port = htons(CLIENT_FIRST_PORT);
         SET_SA_LEN(sin, sizeof(struct sockaddr_in));
     } else if (domain == AF_INET6) {
-        sin6->sin6_port = htons(5350);
+        sin6->sin6_port = htons(CLIENT_FIRST_PORT);
         SET_SA_LEN(sin6, sizeof(struct sockaddr_in6));
     } else {
         PCP_LOG(PCP_LOGLVL_ERR, "Unsupported socket domain:%d", domain);
@@ -337,7 +347,8 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
     while (bind(s, (struct sockaddr *)&sas,
                 (socklen_t)SA_LEN((struct sockaddr *)&sas)) ==
            PCP_SOCKET_ERROR) {
-        if (pcp_get_error() == PCP_ERR_ADDRINUSE) {
+        // a port the system picks is not stepped up from
+        if (CLIENT_FIRST_PORT != 0 && pcp_get_error() == PCP_ERR_ADDRINUSE) {
             if (sas.ss_family == AF_INET) {
                 sin->sin_port = htons(ntohs(sin->sin_port) + 1);
             } else {
@@ -349,19 +360,6 @@ static PCP_SOCKET pcp_socket_create_impl(int domain, int type, int protocol) {
             return PCP_INVALID_SOCKET;
         }
     }
-#ifdef PCP_ANNOUNCE_LISTENER
-    /* Only now, not before bind(): with the option set before it, a second
-     * client's socket would bind 5350 as well and take this one's replies. It
-     * still fails and moves on; only an announce listener, which also has the
-     * option, can share the port. */
-    if (ntohs(sas.ss_family == AF_INET ? sin->sin_port : sin6->sin6_port) ==
-            PCP_ANNOUNCE_PORT &&
-        pcp_socket_share_port(s) != 0) {
-        PCP_LOG(PCP_LOGLVL_WARN, "%s",
-                "Could not share port 5350, another client on this host will "
-                "not receive restart announcements");
-    }
-#endif
     PCP_LOG(PCP_LOGLVL_DEBUG, "%s: return %d", __FUNCTION__, s);
     return s;
 #endif
@@ -418,13 +416,13 @@ static int log_join_failure(const char *group) {
 
 /*
  * A restarted server announces itself to 224.0.0.1 / ff02::1, port 5350
- * (RFC 6887, 14.2.1), the port this socket is bound to unless another
- * client has it. A socket that has not joined the group does not always get
- * those datagrams: on Linux an IPv6 socket, even a dual-stack one, does not
- * receive IPv4 multicast without IP_ADD_MEMBERSHIP. Join both groups on the
- * interface that reaches the server. A failure is logged but does not fail
- * adding the server; the client then notices a restart from the epoch in the
- * next ordinary reply.
+ * (RFC 6887, 14.2.1), where pcp_socket_listen_announce() listens, or this
+ * socket itself in a build without that listener. A socket that has not joined
+ * the group does not always get those datagrams: on Linux an IPv6 socket, even
+ * a dual-stack one, does not receive IPv4 multicast without IP_ADD_MEMBERSHIP.
+ * Join both groups on the interface that reaches the server. A failure is
+ * logged but does not fail adding the server; the client then notices a restart
+ * from the epoch in the next ordinary reply.
  */
 int pcp_socket_join_announce_groups(struct pcp_ctx_s *ctx,
                                     const struct in6_addr *src_ip,
@@ -575,13 +573,12 @@ static PCP_SOCKET announce_listener(const struct in6_addr *src_ip,
 #endif // PCP_ANNOUNCE_LISTENER
 
 /*
- * Servers announce a restart to port 5350 only, and only one client on a host
- * can have its socket there: the next gets 5351 (see pcp_socket_create_impl).
- * Joining the groups on that socket gets it nothing, so such a client must
- * listen on 5350 separately, or it hears of a restart only from the reply to
- * its next renewal. The listener is bound to the group address rather than to
- * the wildcard, so it shares the port without taking the unicast replies of
- * the client that holds it.
+ * Servers announce a restart to port 5350 only, and the client's own socket
+ * is on a random port (see CLIENT_FIRST_PORT), so the client listens on 5350
+ * separately, or it hears of a restart only from the reply to its next
+ * renewal. The listener is bound to the group address rather than to the
+ * wildcard, and shares the port (RFC 6887, 14.1.3), so other programs on the
+ * host listening there, such as other clients, keep their unicast traffic.
  */
 void pcp_socket_listen_announce(struct pcp_server *s) {
 #ifdef PCP_ANNOUNCE_LISTENER

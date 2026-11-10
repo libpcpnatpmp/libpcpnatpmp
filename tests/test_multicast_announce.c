@@ -289,9 +289,10 @@ static void server_added_twice(const char *address) {
     pcp_terminate(ctx, 0);
 }
 
-/* A second client on the host cannot have port 5350, to which the server
- * announces. It must hear the announcement all the same, and the listener
- * sharing the port must not take the replies of the client which holds 5350. */
+/* Each client on the host has a random port of its own (RFC 6887, 8.1), not
+ * 5350, to which the server announces. A second client must hear the
+ * announcement while the first is open, and the listeners sharing 5350 must
+ * not take either client's replies. */
 static void second_client_on_host(const char *address) {
     struct sockaddr_in to;
     struct pollfd p;
@@ -300,16 +301,12 @@ static void second_client_on_host(const char *address) {
     int fd;
 
     TEST(first != NULL);
-    if (client_port(first) != ANNOUNCE_PORT) {
-        printf("SKIP second_client_on_host: port %d is in use\n",
-               ANNOUNCE_PORT);
-        pcp_terminate(first, 0);
-        return;
-    }
+    TEST(client_port(first) != ANNOUNCE_PORT);
 
-    /* a server restart seen by a client on the other port */
+    /* a server restart seen by a second client */
     TEST(announce_resend_delay(address, 0, 0, 2.0, NULL) >= 0);
     TEST(last_client_port != ANNOUNCE_PORT);
+    TEST(last_client_port != client_port(first));
     {
         pcp_ctx_t *second = pcp_init(DISABLE_AUTODISCOVERY, NULL);
         pcp_server_t *server;
@@ -336,11 +333,11 @@ static void second_client_on_host(const char *address) {
         pcp_terminate(second, 0);
     }
 
-    /* unicast to 5350 still goes to the first client */
+    /* unicast to the first client's port goes to it */
     fd = serve_socket(address);
     memset(&to, 0, sizeof(to));
     to.sin_family = AF_INET;
-    to.sin_port = htons(ANNOUNCE_PORT);
+    to.sin_port = htons(client_port(first));
     TEST(inet_pton(AF_INET, address, &to.sin_addr) == 1);
     TEST(sendto(fd, &c, 1, 0, (struct sockaddr *)&to, sizeof(to)) == 1);
     p.fd = pcp_get_socket(first);

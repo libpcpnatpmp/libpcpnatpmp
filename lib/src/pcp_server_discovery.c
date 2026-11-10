@@ -137,8 +137,8 @@ static pcp_errno psd_fill_pcp_server_src(pcp_server_t *s) {
         s->pcp_scope_id = src_scope_id;
     }
 #endif // PCP_USE_IPV6_SOCKET
-    // here, so that servers found by autodiscovery join as well; a client
-    // that is not on port 5350 also listens there
+    // here, so that servers found by autodiscovery join as well; the
+    // client's socket is not on port 5350, so it also listens there
     if (s->announce_listening &&
         (!IN6_ARE_ADDR_EQUAL(&s->announce_src_ip,
                              (const struct in6_addr *)s->src_ip) ||
