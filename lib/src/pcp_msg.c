@@ -482,8 +482,29 @@ int validate_pcp_msg(pcp_recv_msg_t *f) {
     return 1;
 }
 
-static pcp_errno parse_options(UNUSED pcp_recv_msg_t *f, UNUSED void *r) {
-    // TODO: implement parsing of pcp options
+// Notes the options of a response that the client acts on: THIRD_PARTY.
+// Parsing stops at an option that runs past the end of the message.
+static pcp_errno parse_options(pcp_recv_msg_t *f, void *r) {
+    const uint8_t *cur = (const uint8_t *)r;
+    const uint8_t *end = (const uint8_t *)f->pcp_msg_buffer + f->pcp_msg_len;
+
+    while (end - cur >= (ptrdiff_t)sizeof(pcp_options_hdr_t)) {
+        const pcp_options_hdr_t *hdr = (const pcp_options_hdr_t *)cur;
+        size_t len = ntohs(hdr->len);
+        // RFC 6887 section 7.3: option data is padded to 4 octets
+        size_t padded = (len + 3) & ~(size_t)3;
+
+        if ((size_t)(end - cur) - sizeof(*hdr) < padded) {
+            break;
+        }
+        if (hdr->code == PCP_OPTION_3RD_PARTY &&
+            len == sizeof(struct in6_addr)) {
+            f->opt_flags |= optf_3rd_party;
+            memcpy(&f->third_party_ip, cur + sizeof(*hdr),
+                   sizeof(f->third_party_ip));
+        }
+        cur += sizeof(*hdr) + padded;
+    }
     return PCP_ERR_SUCCESS;
 }
 
@@ -688,6 +709,7 @@ pcp_errno parse_response(pcp_recv_msg_t *f) {
     f->recv_version = resp->ver;
     f->recv_result = resp->result_code;
     memset(&f->kd, 0, sizeof(f->kd));
+    f->opt_flags = 0;
 
     f->kd.operation = resp->r_opcode & 0x7f;
 

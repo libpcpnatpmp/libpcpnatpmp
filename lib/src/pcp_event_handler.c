@@ -796,6 +796,21 @@ end:
 ///////////////////////////////////////////////////////////////////////////////
 //            Helper functions for server state handlers
 
+// THIRD_PARTY is mandatory to process, and a success response includes
+// every option the server processed (RFC 6887 section 7.3); a mapping
+// update for a THIRD_PARTY mapping carries it too (section 14.2), since
+// only the option tells mappings of different internal hosts apart. A
+// success response for a THIRD_PARTY flow without the flow's address is
+// therefore not for this flow.
+static int lacks_third_party(const pcp_flow_t *f, const pcp_recv_msg_t *msg) {
+    if (msg->recv_version == 0 || msg->recv_result != PCP_RES_SUCCESS ||
+        !f->third_party_option_present) {
+        return 0;
+    }
+    return !(msg->opt_flags & optf_3rd_party) ||
+           !IN6_ARE_ADDR_EQUAL(&msg->third_party_ip, &f->third_party_ip);
+}
+
 static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
                                                pcp_recv_msg_t *msg) {
     pcp_flow_t *f;
@@ -849,6 +864,13 @@ static pcp_flow_t *server_process_rcvd_pcp_msg(pcp_server_t *s,
 
     PCP_LOG(PCP_LOGLVL_INFO, "Found matching flow %d to received PCP message.",
             f->key_bucket);
+
+    if (lacks_third_party(f, msg)) {
+        PCP_LOG(PCP_LOGLVL_INFO, "%s",
+                "Ignoring a success response without the flow's THIRD_PARTY "
+                "address.");
+        return NULL;
+    }
 
     handle_flow_event(f, FEV_RES_BEGIN + msg->recv_result, msg);
 
