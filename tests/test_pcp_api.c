@@ -29,6 +29,7 @@
 int main(void) {
     pcp_flow_t *f1, *f2;
     pcp_ctx_t *ctx;
+    struct sockaddr_storage internal, suggested;
 
     pcp_log_level = PCP_LOGLVL_NONE;
 
@@ -100,8 +101,23 @@ int main(void) {
                             NULL)) != NULL);
     TEST((f2 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                             IPPROTO_TCP, 100, NULL)) != NULL);
-    pcp_flow_set_prefer_failure_opt(f2);
-    pcp_flow_set_prefer_failure_opt(f2);
+    // PREFER_FAILURE goes only into a MAP that suggests an external port
+    TEST(pcp_flow_set_prefer_failure_opt(NULL) == PCP_ERR_BAD_ARGS);
+    TEST(pcp_flow_set_prefer_failure_opt(f1) == PCP_ERR_BAD_ARGS);
+    TEST(f1->pfailure_option_present == 0);
+    TEST(pcp_flow_set_prefer_failure_opt(f2) == PCP_ERR_BAD_ARGS);
+    TEST(f2->pfailure_option_present == 0);
+    pcp_delete_flow(f2);
+    // separate buffers: Sock_pton() returns the same static one every call
+    TEST(sock_pton("127.0.0.1:1234", (struct sockaddr *)&internal) == 0);
+    TEST(sock_pton("0.0.0.0:5678", (struct sockaddr *)&suggested) == 0);
+    TEST((f2 = pcp_new_flow(ctx, (struct sockaddr *)&internal, NULL,
+                            (struct sockaddr *)&suggested, IPPROTO_TCP, 100,
+                            NULL)) != NULL);
+    TEST(f2->map_peer.ext_port == htons(5678));
+    TEST(pcp_flow_set_prefer_failure_opt(f2) == PCP_ERR_SUCCESS);
+    TEST(pcp_flow_set_prefer_failure_opt(f2) == PCP_ERR_SUCCESS);
+    TEST(f2->pfailure_option_present == 1);
 
     pcp_flow_set_lifetime(f1, 1000);
     TEST((f1->lifetime) >= 99);
@@ -124,6 +140,21 @@ int main(void) {
         ctx = pcp_init(DISABLE_AUTODISCOVERY, NULL);
         TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
         TEST(pcp_add_server(ctx, Sock_pton("127.0.0.2:5351"), 2) == 1);
+        // a refused PREFER_FAILURE leaves the flow for every server unchanged
+        {
+            struct sockaddr_storage peer;
+            pcp_flow_t *fp;
+
+            TEST(sock_pton("127.0.0.3:4321", (struct sockaddr *)&peer) == 0);
+            TEST((fp = pcp_new_flow(ctx, (struct sockaddr *)&internal,
+                                    (struct sockaddr *)&peer, NULL, IPPROTO_TCP,
+                                    100, NULL)) != NULL);
+            TEST(fp->next_child != NULL);
+            TEST(pcp_flow_set_prefer_failure_opt(fp) == PCP_ERR_BAD_ARGS);
+            TEST(fp->pfailure_option_present == 0);
+            TEST(fp->next_child->pfailure_option_present == 0);
+            pcp_delete_flow(fp);
+        }
         TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL,
                                 IPPROTO_TCP, 100, NULL)) != NULL);
         TEST(f1->next_child != NULL);
