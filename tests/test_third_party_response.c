@@ -193,7 +193,7 @@ static void check(uint8_t version, int peer) {
     // THIRD_PARTY with the right address but a length other than 16
     n = put_third_party(opts, "192.0.2.5");
     opts[3] = 12;
-    send_success(server, req, &client, 40003, opts, n);
+    send_success(server, req, &client, 40009, opts, n);
     pump(ctx, server, 200, req, sizeof(req), &client);
     TEST(flow_info(flow).result != pcp_state_succeeded);
 
