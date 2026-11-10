@@ -232,11 +232,12 @@ int pcp_flow_set_location(pcp_flow_t *f, pcp_location_option_p loc);
  * 1 to 32, and is sent as 97 to 128; a value already in 96 to 128 is taken as
  * adjusted and sent unchanged, so 96 permits every IPv4 peer.
  * For any other IPv6 address it is 1 to 128.
- * An invalid prefix length, a NULL filter_ip or an address family other than
- * AF_INET/AF_INET6 is logged and the call leaves the flow unchanged.
+ * Valid only for a MAP flow. Any other flow, an invalid prefix length, a NULL
+ * filter_ip or an address family other than AF_INET/AF_INET6 is logged, and
+ * the call returns PCP_ERR_BAD_ARGS and leaves the flow unchanged.
  */
-void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
-                             uint8_t filter_prefix);
+pcp_errno pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
+                                  uint8_t filter_prefix);
 
 /*
  * Append prefer failure option. Valid only for a MAP flow with a suggested

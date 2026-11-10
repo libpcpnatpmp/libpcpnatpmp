@@ -608,8 +608,8 @@ pcp_errno pcp_flow_set_3rd_party_opt(pcp_flow_t *f,
     return PCP_ERR_SUCCESS;
 }
 
-void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
-                             uint8_t filter_prefix) {
+pcp_errno pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
+                                  uint8_t filter_prefix) {
     pcp_flow_t *fiter;
     struct in6_addr wire_ip;
     uint16_t wire_port;
@@ -619,7 +619,13 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
         (filter_ip->sa_family != AF_INET && filter_ip->sa_family != AF_INET6)) {
         PCP_LOG(PCP_LOGLVL_PERR, "%s: invalid flow or filter address",
                 __FUNCTION__);
-        return;
+        return PCP_ERR_BAD_ARGS;
+    }
+
+    // RFC 6887 section 13.3: FILTER is valid only in a MAP request
+    if (f->kd.operation != PCP_OPCODE_MAP) {
+        PCP_LOG(PCP_LOGLVL_PERR, "%s: FILTER needs a MAP flow", __FUNCTION__);
+        return PCP_ERR_BAD_ARGS;
     }
 
     pcp_fill_in6_addr(&wire_ip, &wire_port, NULL, filter_ip);
@@ -645,7 +651,7 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                     "%s: invalid prefix length %u for an IPv4 filter address "
                     "(valid: 0 to 32, or 96 to 128 already adjusted)",
                     __FUNCTION__, (unsigned)filter_prefix);
-            return;
+            return PCP_ERR_BAD_ARGS;
         }
     } else if (filter_prefix <= 128) {
         wire_prefix = filter_prefix;
@@ -654,7 +660,7 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
                 "%s: invalid prefix length %u for an IPv6 filter address "
                 "(valid: 0 to 128)",
                 __FUNCTION__, (unsigned)filter_prefix);
-        return;
+        return PCP_ERR_BAD_ARGS;
     }
 
     for (fiter = f; fiter != NULL; fiter = fiter->next_child) {
@@ -664,6 +670,7 @@ void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
         fiter->filter_prefix = wire_prefix;
         pcp_flow_updated(fiter);
     }
+    return PCP_ERR_SUCCESS;
 }
 
 pcp_errno pcp_flow_set_prefer_failure_opt(pcp_flow_t *f) {

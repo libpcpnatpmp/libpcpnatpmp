@@ -175,6 +175,16 @@ int main(void) {
         any->kd.operation = PCP_OPCODE_MAP;
         pcp_delete_flow(any);
     }
+    // FILTER goes only into a MAP (f2), never a PEER (f1)
+    TEST(pcp_flow_set_filter_opt(NULL, Sock_pton("8.8.8.8:4444"), 120) ==
+         PCP_ERR_BAD_ARGS);
+    TEST(pcp_flow_set_filter_opt(f2, NULL, 120) == PCP_ERR_BAD_ARGS);
+    TEST(pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 120) ==
+         PCP_ERR_BAD_ARGS);
+    TEST(f1->filter_option_present == 0);
+    TEST(pcp_flow_set_filter_opt(f2, Sock_pton("8.8.8.8:4444"), 120) ==
+         PCP_ERR_SUCCESS);
+    TEST(f2->filter_option_present == 1);
 
     pcp_flow_set_lifetime(f1, 1000);
     TEST((f1->lifetime) >= 99);
@@ -290,21 +300,27 @@ int main(void) {
         TEST(f1->filter_prefix == 128);
 
         // invalid input leaves the flow unchanged
-        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 33);
+        TEST(pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 33) ==
+             PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
         TEST(!IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
-        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 95);
+        TEST(pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 95) ==
+             PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
-        pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 129);
+        TEST(pcp_flow_set_filter_opt(f1, Sock_pton("8.8.8.8:4444"), 129) ==
+             PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
-        pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"), 200);
+        TEST(pcp_flow_set_filter_opt(f1, Sock_pton("[2001:db8::1]:4444"),
+                                     200) == PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
-        pcp_flow_set_filter_opt(f1, NULL, 12);
+        TEST(pcp_flow_set_filter_opt(f1, NULL, 12) == PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
-        pcp_flow_set_filter_opt(NULL, Sock_pton("8.8.8.8:4444"), 12);
+        TEST(pcp_flow_set_filter_opt(NULL, Sock_pton("8.8.8.8:4444"), 12) ==
+             PCP_ERR_BAD_ARGS);
         memset(&unspec, 0, sizeof(unspec));
         unspec.ss_family = AF_UNSPEC;
-        pcp_flow_set_filter_opt(f1, (struct sockaddr *)&unspec, 12);
+        TEST(pcp_flow_set_filter_opt(f1, (struct sockaddr *)&unspec, 12) ==
+             PCP_ERR_BAD_ARGS);
         TEST(f1->filter_prefix == 128);
         TEST(!IN6_IS_ADDR_V4MAPPED(&f1->filter_ip));
 
@@ -312,7 +328,8 @@ int main(void) {
         TEST(f1->next_child->next_child == NULL);
         TEST((f2 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1235"), NULL, NULL,
                                 IPPROTO_TCP, 100, NULL)) != NULL);
-        pcp_flow_set_filter_opt(f2, Sock_pton("8.8.8.8:4444"), 64);
+        TEST(pcp_flow_set_filter_opt(f2, Sock_pton("8.8.8.8:4444"), 64) ==
+             PCP_ERR_BAD_ARGS);
         TEST(f2->filter_option_present == 0);
     }
 

@@ -617,9 +617,12 @@ int main(int argc, char *argv[]) {
         }
 #endif
 
-        if (p.opt_filter) {
+        if (p.opt_filter &&
             pcp_flow_set_filter_opt(flow, (struct sockaddr *)&filter_ip,
-                                    (uint8_t)p.opt_filter_prefix);
+                                    (uint8_t)p.opt_filter_prefix) !=
+                PCP_ERR_SUCCESS) {
+            fprintf(stderr, "Invalid prefix length for Filter option!\n");
+            exit(1);
         }
 
         if (p.opt_pfailure &&
