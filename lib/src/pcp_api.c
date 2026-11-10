@@ -479,6 +479,13 @@ pcp_flow_t *pcp_new_flow(pcp_ctx_t *ctx, struct sockaddr *src_addr,
         }
     } else {
         kd.operation = PCP_OPCODE_MAP;
+        // RFC 6887 section 11.1: all protocols (0) means all ports (0) too
+        if (protocol == 0 && kd.map_peer.src_port != 0) {
+            PCP_LOG(PCP_LOGLVL_PERR, "%s",
+                    "A MAP for all protocols needs internal port 0.");
+            PCP_LOG_END(PCP_LOGLVL_DEBUG);
+            return NULL;
+        }
     }
 
     if (!ext_addr) {

@@ -88,6 +88,12 @@ int main(void) {
     // PCP PEER/MAP tests
     TEST(pcp_new_flow(NULL, NULL, NULL, NULL, 0, 0, NULL) == NULL);
     TEST(pcp_new_flow(ctx, NULL, NULL, NULL, 0, 0, NULL) == NULL);
+    // a MAP for all protocols (0) is for all ports too
+    TEST(pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"), NULL, NULL, 0, 100,
+                      NULL) == NULL);
+    TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1"), NULL, NULL, 0, 100,
+                            NULL)) != NULL);
+    pcp_delete_flow(f1);
 
     TEST((f1 = pcp_new_flow(ctx, Sock_pton("127.0.0.1:1234"),
                             Sock_pton("127.0.0.1"), NULL, IPPROTO_TCP, 100,
