@@ -65,7 +65,8 @@ int pcp_win_sock_cleanup();
 #endif
 
 #if !defined(PCP_SOCKET_IS_VOIDPTR) && !defined(WIN32)
-// A client that did not get port 5350 listens there on a socket of its own
+// The client listens for restart announcements on port 5350 on a socket of
+// its own, its own being on a random port
 #define PCP_ANNOUNCE_LISTENER
 #endif
 
@@ -109,7 +110,7 @@ int pcp_socket_join_announce_groups(struct pcp_ctx_s *ctx,
                                     uint32_t scope_id);
 
 // Call for a server whose groups were joined: gives it a socket on port 5350
-// if the library's socket is on another port.
+// if the library's socket is on another port, as it is with the listener.
 void pcp_socket_listen_announce(struct pcp_server *s);
 void pcp_socket_close_announce(struct pcp_server *s);
 
