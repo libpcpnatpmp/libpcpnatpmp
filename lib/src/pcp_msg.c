@@ -190,7 +190,10 @@ static pcp_errno build_pcp_options(pcp_flow_t *flow, void *cur) {
         cur = add_flowp_option(flow, cur);
     }
 #endif
-    if (flow->filter_option_present) {
+    /* RFC 6887 section 13.3: a MAP request with a lifetime of 0 (a delete)
+     * which carries a FILTER option is MALFORMED_OPTION; the server has the
+     * peers of the mapping anyway */
+    if (flow->filter_option_present && flow->lifetime != 0) {
         cur = add_filter_option(flow, cur);
     }
 
