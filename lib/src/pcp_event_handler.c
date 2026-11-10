@@ -71,6 +71,15 @@
 #ifndef PCP_MIN_ERROR_WAIT
 #define PCP_MIN_ERROR_WAIT 30
 #endif
+/* Longest wait, in seconds, before resending after a short lifetime error.
+ * RFC 6887 section 8.3 has the client limit an error's lifetime against
+ * absurd values but names no number; 30 minutes is what section 7.4
+ * recommends for long lifetime errors, and the most section 9 lets a client
+ * wait after UNSUPP_VERSION. A short lifetime error describes a passing
+ * condition, so a longer lifetime is not taken at its word. */
+#ifndef PCP_MAX_ERROR_WAIT
+#define PCP_MAX_ERROR_WAIT 1800
+#endif
 /* Longest mapping lifetime, in seconds, the client goes by: RFC 6887
  * section 15 has a client treat an absurdly long assigned lifetime as a
  * saner one, such as 24 hours, and renew accordingly, so a mapping is
@@ -604,7 +613,8 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     f->recv_result = msg->recv_result;
 
     gettimeofday(&f->timeout, NULL);
-    f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
+    f->timeout.tv_sec +=
+        MIN(MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT), PCP_MAX_ERROR_WAIT);
 
     return fev_none;
 }
