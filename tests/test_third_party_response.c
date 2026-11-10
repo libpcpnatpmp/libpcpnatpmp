@@ -40,8 +40,10 @@
 // The test plays the PCP server itself, to send success responses with
 // and without the THIRD_PARTY option.
 #define HEADER_LEN 24
-#define MAP_LEN 36
-#define PEER_LEN 56
+// MAP and PEER bodies; version 1 has no 12-octet nonce
+#define MAP_LEN(version) ((version) == 1 ? 24 : 36)
+#define PEER_LEN(version) ((version) == 1 ? 44 : 56)
+#define EXT_PORT_AT(version) ((version) == 1 ? 6 : 18)
 #define OPT_HDR_LEN 4
 #define THIRD_PARTY 1
 #define UNKNOWN_OPTIONAL 200
@@ -82,7 +84,7 @@ static int pump(pcp_ctx_t *ctx, PCP_SOCKET server, int ms, uint8_t *buf,
             socklen_t from_len = sizeof(*from);
             got = (int)recvfrom(server, (char *)buf, (int)buf_len, 0,
                                 (struct sockaddr *)from, &from_len);
-            TEST(got >= HEADER_LEN + MAP_LEN);
+            TEST(got >= HEADER_LEN + MAP_LEN(buf[0]));
         }
     }
     return got;
@@ -103,27 +105,29 @@ static size_t put_third_party(uint8_t *at, const char *ip) {
     return OPT_HDR_LEN + 16;
 }
 
-// Answers the MAP or PEER request in `req` with success, assigning external
-// port `ext_port`, and the `opts_len` octets of options in `opts`.
+// Answers the MAP or PEER request in `req` with success in the request's
+// version, assigning external port `ext_port`, and the `opts_len` octets of
+// options in `opts`.
 static void send_success(PCP_SOCKET server, const uint8_t *req,
                          const struct sockaddr_storage *to, uint16_t ext_port,
                          const uint8_t *opts, size_t opts_len) {
-    uint8_t resp[HEADER_LEN + PEER_LEN + 64];
+    uint8_t resp[HEADER_LEN + PEER_LEN(2) + 64];
     uint32_t lifetime = htonl(3600);
     uint32_t epoch = htonl(1000);
     uint16_t port = htons(ext_port);
-    size_t body = req[1] == 2 ? PEER_LEN : MAP_LEN;
+    uint8_t version = req[0];
+    size_t body = req[1] == 2 ? PEER_LEN(version) : MAP_LEN(version);
     size_t len = HEADER_LEN + body + opts_len;
 
     TEST(len <= sizeof(resp));
     memset(resp, 0, HEADER_LEN);
-    resp[0] = 2;                        // version
+    resp[0] = version;
     resp[1] = (uint8_t)(0x80 | req[1]); // MAP or PEER response
     memcpy(resp + 4, &lifetime, 4);
     memcpy(resp + 8, &epoch, 4);
-    // nonce, protocol, ports and addresses as in the request
+    // nonce (version 2), protocol, ports and addresses as in the request
     memcpy(resp + HEADER_LEN, req + HEADER_LEN, body);
-    memcpy(resp + HEADER_LEN + 18, &port, 2);
+    memcpy(resp + HEADER_LEN + EXT_PORT_AT(version), &port, 2);
     if (opts_len > 0) {
         memcpy(resp + HEADER_LEN + body, opts, opts_len);
     }
@@ -143,9 +147,10 @@ static pcp_flow_info_t flow_info(pcp_flow_t *flow) {
     return first;
 }
 
-// A MAP, or a PEER to 127.0.0.1:4321, for 192.0.2.5 (THIRD_PARTY) takes only
-// a success response that carries THIRD_PARTY 192.0.2.5.
-static void check(int peer) {
+// A MAP, or a PEER to 127.0.0.1:4321, for 192.0.2.5 (THIRD_PARTY) to a PCP
+// server of `version` takes only a success response that carries THIRD_PARTY
+// 192.0.2.5.
+static void check(uint8_t version, int peer) {
     char server_addr[32];
     uint8_t req[1100], opts[64];
     size_t n;
@@ -155,7 +160,7 @@ static void check(int peer) {
     pcp_flow_t *flow;
 
     snprintf(server_addr, sizeof(server_addr), "127.0.0.1:%d", server_port);
-    TEST(pcp_add_server(ctx, Sock_pton(server_addr), 2) == 0);
+    TEST(pcp_add_server(ctx, Sock_pton(server_addr), version) == 0);
     TEST(sock_pton("127.0.0.1:1234", (struct sockaddr *)&internal) == 0);
     TEST(sock_pton("127.0.0.1:4321", (struct sockaddr *)&remote) == 0);
     TEST(sock_pton("192.0.2.5", (struct sockaddr *)&third) == 0);
@@ -165,6 +170,7 @@ static void check(int peer) {
     TEST(flow != NULL);
     pcp_flow_set_3rd_party_opt(flow, (struct sockaddr *)&third);
     TEST(pump(ctx, server, 500, req, sizeof(req), &client) > 0);
+    TEST(req[0] == version);
     TEST(req[1] == (peer ? 2 : 1));
 
     // no THIRD_PARTY: a mapping of the client itself
@@ -214,8 +220,10 @@ static void check(int peer) {
 int main(void) {
     pcp_log_level = PCP_LOGLVL_NONE;
     PD_SOCKET_STARTUP();
-    check(0);
-    check(1);
+    check(2, 0);
+    check(2, 1);
+    check(1, 0);
+    check(1, 1);
     PD_SOCKET_CLEANUP();
     return 0;
 }
