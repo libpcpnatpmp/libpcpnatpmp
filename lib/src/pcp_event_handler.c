@@ -459,6 +459,19 @@ static int count_waiting_iter(pcp_flow_t *f, void *data) {
     return 0;
 }
 
+struct other_waiting {
+    const pcp_flow_t *flow;
+    uint32_t server_indx;
+};
+
+// stops at another flow to the same server that waits for a response
+static int other_waiting_iter(pcp_flow_t *f, void *data) {
+    const struct other_waiting *d = data;
+
+    return f != d->flow && f->pcp_server_indx == d->server_indx &&
+           f->state == pfs_wait_resp;
+}
+
 // returns 1 if the flow may not send now; its timeout is then set to the end
 // of the current window
 static int pace_defer(pcp_flow_t *f, int first_transmission) {
@@ -466,6 +479,20 @@ static int pace_defer(pcp_flow_t *f, int first_transmission) {
     if (server && server->restart_pending) {
         f->timeout = server->restart_resend_at;
         return 1;
+    }
+    // RFC 6886 section 3.1: requests to a NAT-PMP gateway go one at a time,
+    // the next once the gateway has answered the one before
+    if (server && server->pcp_version == 0 && first_transmission) {
+        struct other_waiting d = {f, f->pcp_server_indx};
+
+        // the iteration stops, with success, at such a flow
+        if (pcp_db_foreach_flow(f->ctx, other_waiting_iter, &d) ==
+            PCP_ERR_SUCCESS) {
+            gettimeofday(&f->timeout, NULL);
+            f->timeout.tv_usec += PCP_PACE_WINDOW_MS * 1000;
+            timeval_align(&f->timeout);
+            return 1;
+        }
     }
 #if PCP_PACE_BURST > 0
     pcp_ctx_t *ctx = f->ctx;

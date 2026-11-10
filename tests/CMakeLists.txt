@@ -46,6 +46,7 @@ set (TEST_LIFETIME_RENEWAL_SOURCES
 )
 add_executable (test_lifetime_renewal ${TEST_LIFETIME_RENEWAL_SOURCES})
 add_executable (test_pcp_api test_pcp_api.c)
+add_executable (test_natpmp_one_at_a_time test_natpmp_one_at_a_time.c)
 set (TEST_PCP_CLI_NONCE_SRC
     test_pcp_cli_nonce.c
     ${TEST_PROCESS_HELPER_SOURCES}
@@ -116,6 +117,7 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
+target_link_libraries (test_natpmp_one_at_a_time pcpnatpmp)
 target_link_libraries (test_pcp_cli_client pcpnatpmp)
 target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
@@ -147,6 +149,7 @@ register_pcp_test (test_event_handler)
 register_pcp_test (test_flow_notify)
 register_pcp_test (test_gateway)
 register_pcp_test (test_lifetime_renewal)
+register_pcp_test (test_natpmp_one_at_a_time)
 register_pcp_test (test_pcp_api)
 register_pcp_test (test_pcp_cli_client)
 register_pcp_test (test_pcp_cli_nonce)
