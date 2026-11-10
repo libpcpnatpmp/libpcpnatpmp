@@ -43,10 +43,13 @@
 // The test plays the PCP server itself. After a NO_RESOURCES answer the
 // client must hold back requests for new mappings to that server, and every
 // request if the answer was to a deletion, for the error's lifetime (RFC 6887
-// sections 11.4, 12.4).
+// sections 11.4, 12.4). A NAT-PMP gateway's Out of resources means the same.
 #define HEADER_LEN 24
 #define MAP_LEN 36
 #define NO_RESOURCES 8
+// NAT-PMP (RFC 6886 section 3.5)
+#define NATPMP_MAP_LEN 12
+#define NATPMP_OUT_OF_RESOURCES 4
 #define PORTS 4
 // the shortest hold: the client waits at least PCP_MIN_ERROR_WAIT, 30 s
 #define MIN_HOLD_MS 30000
@@ -66,6 +69,8 @@ static uint8_t last_req[PORTS][HEADER_LEN + MAP_LEN];
 // show once 3 s have passed (RFC 6887 section 8.5)
 static uint32_t epoch = 1000;
 static time_t epoch_start;
+// the protocol the server speaks: 2 for PCP, 0 for NAT-PMP
+static uint8_t version = 2;
 
 // the port open_server() got, chosen by the system so tests running at the
 // same time do not collide
@@ -86,6 +91,34 @@ static PCP_SOCKET open_server(void) {
     return sock;
 }
 
+// Answers the NAT-PMP request `req` with `result`; a MAP refused has
+// lifetime 0, so the hold is the shortest one.
+static void answer_natpmp(const uint8_t *req, uint16_t result) {
+    uint8_t resp[16];
+    uint32_t e = htonl(epoch + (uint32_t)(time(NULL) - epoch_start));
+    uint16_t code = htons(result);
+    int len = 16;
+
+    memset(resp, 0, sizeof(resp));
+    resp[1] = (uint8_t)(0x80 | req[1]);
+    memcpy(resp + 4, &e, 4);
+    if (req[1] == 0) {
+        // external address 9.9.9.9
+        resp[8] = resp[9] = resp[10] = resp[11] = 9;
+        len = 12;
+    } else {
+        memcpy(resp + 2, &code, 2);
+        memcpy(resp + 8, req + 4, 2); // internal port
+        if (result == 0) {
+            memcpy(resp + 10, req + 4, 2); // the same external port
+            memcpy(resp + 12, req + 8, 4); // the lifetime asked for
+        }
+    }
+    TEST(sendto(server, (const char *)resp, len, 0,
+                (const struct sockaddr *)&client,
+                SA_LEN((struct sockaddr *)&client)) == len);
+}
+
 // Answers the MAP request `req` with `result`; an error has lifetime 0, so
 // the hold is the shortest one.
 static void answer(const uint8_t *req, uint8_t result) {
@@ -93,6 +126,10 @@ static void answer(const uint8_t *req, uint8_t result) {
     uint32_t lifetime;
     uint32_t e = htonl(epoch + (uint32_t)(time(NULL) - epoch_start));
 
+    if (version == 0) {
+        answer_natpmp(req, result);
+        return;
+    }
     memcpy(&lifetime, req + 4, 4);
     memset(resp, 0, HEADER_LEN);
     resp[0] = 2;
@@ -136,11 +173,21 @@ static void pump(pcp_ctx_t *ctx, int ms) {
             enum treatment how;
             int i;
 
-            if (got < HEADER_LEN + MAP_LEN || req[0] != 2 || req[1] != 1) {
+            if (version == 0 && got >= 2 && req[0] == 0 && req[1] == 0) {
+                answer_natpmp(req, 0); // the gateway's external address
                 continue;
             }
-            memcpy(&port, req + HEADER_LEN + 16, 2);
-            memcpy(&lifetime, req + 4, 4);
+            if (version == 0 && got >= NATPMP_MAP_LEN && req[0] == 0 &&
+                req[1] == 2) {
+                memcpy(&port, req + 4, 2);
+                memcpy(&lifetime, req + 8, 4);
+            } else if (version == 2 && got >= HEADER_LEN + MAP_LEN &&
+                       req[0] == 2 && req[1] == 1) {
+                memcpy(&port, req + HEADER_LEN + 16, 2);
+                memcpy(&lifetime, req + 4, 4);
+            } else {
+                continue;
+            }
             i = ntohs(port) - 1234;
             if (i < 0 || i >= PORTS) {
                 continue;
@@ -159,7 +206,9 @@ static void pump(pcp_ctx_t *ctx, int ms) {
             }
             memcpy(last_req[i], req, sizeof(last_req[i]));
             if (how == SUCCEED || how == REFUSE) {
-                answer(req, how == SUCCEED ? 0 : NO_RESOURCES);
+                answer(req, how == SUCCEED ? 0
+                            : version == 0 ? NATPMP_OUT_OF_RESOURCES
+                                           : NO_RESOURCES);
             }
         }
     }
@@ -182,7 +231,7 @@ static pcp_ctx_t *start(void) {
     int i;
 
     snprintf(addr, sizeof(addr), "127.0.0.1:%d", server_port);
-    TEST(pcp_add_server(ctx, Sock_pton(addr), 2) == 0);
+    TEST(pcp_add_server(ctx, Sock_pton(addr), version) == 0);
     pcp_set_restart_delay(ctx, 0);
     epoch = 1000;
     epoch_start = time(NULL);
@@ -353,6 +402,9 @@ int main(void) {
     server = open_server();
 
     new_mappings_held();
+    version = 0;
+    new_mappings_held();
+    version = 2;
     everything_held(0);
     everything_held(1);
     restart_ends_hold();

@@ -618,8 +618,9 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
 
     // RFC 6887 sections 11.4 and 12.4: NO_RESOURCES holds back requests for
     // new mappings to the whole server for the error's lifetime, and every
-    // request if it answered a deletion
-    if (msg->recv_version != 0 && msg->recv_result == PCP_RES_NO_RESOURCES) {
+    // request if it answered a deletion. A NAT-PMP gateway's Out of resources
+    // arrives as NO_RESOURCES and is held the same way.
+    if (msg->recv_result == PCP_RES_NO_RESOURCES) {
         pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
 
         if (s) {
