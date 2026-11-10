@@ -28,6 +28,7 @@
 #include <unistd.h>
 #endif
 
+#include "pcp_client_db.h"
 #include "pcp_socket.h"
 #include "pcpnatpmp.h"
 #include "test_macro.h"
@@ -184,6 +185,26 @@ static void free_server_run_result(server_run_result_t *result) {
 static int contains_string(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
+
+static int count_string(const char *haystack, const char *needle) {
+    int n = 0;
+
+    while ((haystack = strstr(haystack, needle)) != NULL) {
+        n++;
+        haystack += strlen(needle);
+    }
+    return n;
+}
+
+/* the number of FILTER options the next logged request has to carry, -1 :
+ * not checked */
+static int expected_filter_options = -1;
+/* called with the flow after the success reply, then reset to NULL */
+static void (*check_after_success)(pcp_flow_t *flow) = NULL;
+/* for the next case: the requests the server answers before it stops, and
+ * the most FILTER options it accepts in one (0: no limit); then reset */
+static uint8_t server_requests = 1;
+static uint8_t server_max_filters = 0;
 
 static server_run_result_t run_server_main(int argc, char **argv) {
     server_run_result_t result;
@@ -402,7 +423,10 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
     test_pcp_server_config_init(&server_config);
     server_config.server_port = server_port;
     server_config.server_address = "0.0.0.0";
-    server_config.server_info.end_after_recv = 1;
+    server_config.server_info.end_after_recv = server_requests;
+    server_config.server_info.max_filters = server_max_filters;
+    server_requests = 1;
+    server_max_filters = 0;
     copy_log_file_path(&server_config.server_info, log_path);
     test_pcp_server_sequence_init(&server_sequence, &server_config, 1);
     test_sleep_ms(100);
@@ -423,6 +447,10 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
 
     TEST(test_pcp_wait_with_servers(flow, 3000, &server_sequence) ==
          pcp_state_succeeded);
+    if (check_after_success != NULL) {
+        check_after_success(flow);
+        check_after_success = NULL;
+    }
 
     pcp_close_flow(flow);
     pcp_delete_flow(flow);
@@ -436,6 +464,14 @@ static void run_logged_flow_case(const char *log_path, const char *server_port,
             TEST(0);
         }
     }
+    if (expected_filter_options >= 0 &&
+        count_string(log_contents, "OPTION: \t Filter") !=
+            expected_filter_options) {
+        printf("expected %d FILTER options:\n%s\n", expected_filter_options,
+               log_contents);
+        TEST(0);
+    }
+    expected_filter_options = -1;
     free(log_contents);
     remove_log_file(log_path);
 }
@@ -456,16 +492,87 @@ static void setup_filter_v4mapped(pcp_flow_t *flow) {
     pcp_flow_set_filter_opt(flow, filter_ip, 32);
 }
 
+/* a removal goes out only once the server may have filters */
 static void setup_filter_remove_v4(pcp_flow_t *flow) {
-    struct sockaddr *filter_ip = Sock_pton("8.8.8.8:4444");
-
-    pcp_flow_set_filter_opt(flow, filter_ip, 0);
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 12);
+    flow->filter_sent = 1; /* as if a request with 8.8.8.8 had gone out */
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 0);
 }
 
 static void setup_filter_v6(pcp_flow_t *flow) {
     struct sockaddr *filter_ip = Sock_pton("[2001:db8::1]:6666");
 
     pcp_flow_set_filter_opt(flow, filter_ip, 64);
+}
+
+/* three filters, one given twice : three FILTER options in one request */
+static void setup_filters(pcp_flow_t *flow) {
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 12);
+    pcp_flow_set_filter_opt(flow, Sock_pton("9.9.9.9:5555"), 32);
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 12);
+    pcp_flow_set_filter_opt(flow, Sock_pton("1.1.1.0:6666"), 24);
+}
+
+/* PCP_FILTER_MODE_ONE : each filter replaces the previous one */
+static void setup_filter_one(pcp_flow_t *flow) {
+    pcp_flow_set_filter_mode(flow, PCP_FILTER_MODE_ONE);
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 12);
+    pcp_flow_set_filter_opt(flow, Sock_pton("9.9.9.9:5555"), 32);
+}
+
+/* RFC 6887 section 13.3: to change its filters a client sends a FILTER with
+ * prefix length 0, which removes the server's filters, then the new ones */
+static void setup_filter_replace(pcp_flow_t *flow) {
+    pcp_flow_set_filter_mode(flow, PCP_FILTER_MODE_ONE);
+    pcp_flow_set_filter_opt(flow, Sock_pton("8.8.8.8:4444"), 32);
+    flow->filter_sent = 1; /* as if a request with 8.8.8.8 had gone out */
+    pcp_flow_set_filter_opt(flow, Sock_pton("9.9.9.9:5555"), 32);
+}
+
+/* the server accepted the reset: later requests carry only the new filter */
+static void check_filter_reset_done(pcp_flow_t *flow) {
+    TEST(flow->filter_reset == 0);
+    TEST(flow->filter_reset_sent == 0);
+    TEST(flow->filter_sent == 1);
+    TEST(flow->filter_count == 1);
+}
+
+static void add_filters(pcp_flow_t *flow, int n) {
+    char addr[32];
+    int i;
+
+    for (i = 0; i < n; i++) {
+        snprintf(addr, sizeof(addr), "10.5.0.%d:80", i);
+        TEST(pcp_flow_set_filter_opt(flow, Sock_pton(addr), 32) ==
+             PCP_ERR_SUCCESS);
+    }
+}
+
+static void setup_five_filters(pcp_flow_t *flow) { add_filters(flow, 5); }
+
+static void setup_fifty_filters(pcp_flow_t *flow) { add_filters(flow, 50); }
+
+/* the limit the server showed, through the API */
+static void check_filters_limited(pcp_flow_t *flow) {
+    size_t n = 0;
+    pcp_flow_info_t *info = pcp_flow_get_info(flow, &n);
+
+    TEST(info != NULL && n == 1);
+    TEST(info[0].filter_count == 5);
+    TEST(info[0].filter_accepted == 3);
+    TEST(info[0].filter_server_limit == 3);
+    free(info);
+}
+
+static void check_filters_all_accepted(pcp_flow_t *flow) {
+    size_t n = 0;
+    pcp_flow_info_t *info = pcp_flow_get_info(flow, &n);
+
+    TEST(info != NULL && n == 1);
+    TEST(info[0].filter_count == 50);
+    TEST(info[0].filter_accepted == 50);
+    TEST(info[0].filter_server_limit == 0);
+    free(info);
 }
 
 static void test_log_file_cases(void) {
@@ -521,6 +628,31 @@ static void test_log_file_cases(void) {
     static const char *const filter_v6[] = {"OPTION: \t Filter", "PREFIX: 64",
                                             "FILTER PORT: 6666",
                                             "FILTER IP: 2001:db8::1", NULL};
+    static const char *const filters[] = {"PCP protocol VERSION 2.",
+                                          "FILTER PORT: 4444",
+                                          "PREFIX: 108",
+                                          "FILTER PORT: 5555",
+                                          "PREFIX: 128",
+                                          "FILTER PORT: 6666",
+                                          "PREFIX: 120",
+                                          "9.9.9.9",
+                                          "1.1.1.0",
+                                          NULL};
+    static const char *const filter_replace[] = {"PCP protocol VERSION 2.",
+                                                 "PREFIX: 0",
+                                                 "FILTER PORT: 5555",
+                                                 "PREFIX: 128",
+                                                 "9.9.9.9",
+                                                 NULL};
+    static const char *const filters_limited[] = {
+        "PCP protocol VERSION 2.", "FILTER IP: ::ffff:10.5.0.4",
+        "FILTER IP: ::ffff:10.5.0.3", "FILTER IP: ::ffff:10.5.0.2", NULL};
+    static const char *const filters_many[] = {
+        "PCP protocol VERSION 2.", "FILTER IP: ::ffff:10.5.0.0",
+        "FILTER IP: ::ffff:10.5.0.49", NULL};
+    static const char *const filter_one[] = {"PCP protocol VERSION 2.",
+                                             "FILTER PORT: 5555", "PREFIX: 128",
+                                             "9.9.9.9", NULL};
 
     sock_pton("127.0.0.1:1234", (struct sockaddr *)&source);
     sock_pton("127.0.0.1:8888", (struct sockaddr *)&destination);
@@ -540,18 +672,50 @@ static void test_log_file_cases(void) {
                          (struct sockaddr *)&source, NULL,
                          (struct sockaddr *)&suggested_ext,
                          setup_prefer_failure, prefer_failure);
+    expected_filter_options = 1;
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, NULL, setup_filter,
                          filter);
+    expected_filter_options = 1;
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, NULL,
                          setup_filter_v4mapped, filter_v4mapped);
+    expected_filter_options = 1;
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, NULL,
                          setup_filter_remove_v4, filter_remove_v4);
     run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
                          (struct sockaddr *)&source, NULL, NULL,
                          setup_filter_v6, filter_v6);
+    expected_filter_options = 3;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL, setup_filters,
+                         filters);
+    expected_filter_options = 1;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         setup_filter_one, filter_one);
+    expected_filter_options = 2;
+    check_after_success = check_filter_reset_done;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         setup_filter_replace, filter_replace);
+    /* a server that accepts 3: requests with 5 and 4 are refused, the one
+     * with 3 is accepted */
+    expected_filter_options = 5 + 4 + 3;
+    server_requests = 3;
+    server_max_filters = 3;
+    check_after_success = check_filters_limited;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         setup_five_filters, filters_limited);
+    /* more than fit in one request: the rest in the next one */
+    expected_filter_options = 50;
+    server_requests = 2;
+    check_after_success = check_filters_all_accepted;
+    run_logged_flow_case("test_pcp_server.log", TEST_PCP_SERVER_LOG_PORT, 2,
+                         (struct sockaddr *)&source, NULL, NULL,
+                         setup_fifty_filters, filters_many);
 }
 
 static void send_malformed_packet(const char *server_port) {

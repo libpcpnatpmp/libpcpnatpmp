@@ -304,10 +304,12 @@ static int run_scenario(uint8_t second_server_requests, int expect_success) {
 static void *reservation_server_main(void *arg UNUSED) {
     server_info_t server_info;
 
-    /* before the restart: answers the three reservations, then goes away */
+    /* before the restart: up for an hour, so the epoch after the restart is
+     * clearly lower than expected; answers the three reservations, then goes
+     * away */
     init_server_info(&server_info, 3, LOG_BEFORE_RESTART);
     inet_pton(AF_INET6, "::ffff:9.9.9.9", &server_info.ext_ip);
-    server_info.epoch_time_start = time(NULL);
+    server_info.epoch_time_start = time(NULL) - 3600;
     execPCPServer("5351", "0.0.0.0", &server_info);
 
     /* after the restart: epoch starts again; logs until it times out */
@@ -320,7 +322,8 @@ static void *reservation_server_main(void *arg UNUSED) {
 }
 
 /* MAP, MAP with a FILTER option and PEER reservations all come back, with
- * their options, when the server restarts. */
+ * their options, when the server restarts. The restart shows in the epoch of
+ * the first renewal's reply; a renewal itself carries no FILTER option. */
 static void run_reservation_scenario(void) {
     struct sockaddr_storage src[3], dst, filter_ip;
     pcp_flow_t *flow[3];
@@ -347,6 +350,7 @@ static void run_reservation_scenario(void) {
 
     ctx = pcp_init(0, NULL);
     TEST(ctx);
+    pcp_set_restart_delay(ctx, 0);
     TEST(pcp_add_server(ctx, Sock_pton("127.0.0.1:5351"), 2) == 0);
     sock_pton("127.0.0.1:3001", (struct sockaddr *)&src[0]);
     sock_pton("127.0.0.1:3002", (struct sockaddr *)&src[1]);
@@ -367,8 +371,8 @@ static void run_reservation_scenario(void) {
         TEST(pcp_wait(flow[i], 3000, 0) == pcp_state_succeeded);
     }
 
-    /* renewals go to the restarted server, which makes the client re-send
-     * every reservation */
+    /* renewals go to the restarted server, whose epoch makes the client
+     * re-send every reservation */
     gettimeofday(&end, NULL);
     end.tv_sec += 12;
     do {

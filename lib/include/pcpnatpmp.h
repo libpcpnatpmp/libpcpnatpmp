@@ -217,22 +217,92 @@ int pcp_flow_set_location(pcp_flow_t *f, pcp_location_option_p loc);
 #endif
 
 /*
- * Append filter option. A mapping without a filter lets every peer in; each
- * filter restricts it to the peers it names, and filters add up.
- * filter_prefix is the prefix length of filter_ip.
- * 0 removes all filters of the mapping: it is sent as address ::, port 0,
- * prefix 0 for any filter_ip, as RFC 6887 section 13.3 allows prefix 0 only
- * for an IPv6 address. So no filter can permit every IPv6 peer; 2000::/3
- * covers every global-unicast IPv6 peer without matching IPv4 ones.
+ * The default of the most FILTER options a flow keeps;
+ * pcp_set_max_filter_opts() changes it at run time. A PCP message has room for
+ * about 40 of them, so more go out in several requests (see
+ * pcp_flow_set_filter_opt()).
+ */
+#define PCP_MAX_FILTER_OPTIONS 500
+
+/*
+ * Set the most FILTER options each flow of ctx keeps, 1 to 65535 (default
+ * PCP_MAX_FILTER_OPTIONS). A flow that already has more keeps them, but
+ * pcp_flow_set_filter_opt() adds no filter to it until it has fewer. Returns
+ * PCP_ERR_SUCCESS, or PCP_ERR_BAD_ARGS for a NULL ctx or 0 (ctx unchanged).
+ */
+int pcp_set_max_filter_opts(pcp_ctx_t *ctx, uint16_t max);
+
+/*
+ * How pcp_flow_set_filter_opt() adds a FILTER option to a flow:
+ * PCP_FILTER_MODE_MULTI (the default): each call adds a filter (up to
+ *   pcp_set_max_filter_opts(); a filter already there is not added again), as
+ *   RFC 6887 section 13.3 allows.
+ * PCP_FILTER_MODE_ONE: a flow has one FILTER option, each call replaces it (the
+ *   behavior of earlier versions). Switching to it keeps the last filter in
+ *   the list; a filter added again keeps its place.
+ * A server adds the filters of each request to the ones it has. When a filter
+ * is removed (replaced, dropped by a mode switch, or cleared), the next
+ * requests start with a FILTER option with prefix length 0, which removes the
+ * server's filters, until the server accepts one of them; the filters the
+ * flow still has are sent again after it.
+ */
+typedef enum {
+    PCP_FILTER_MODE_MULTI = 0,
+    PCP_FILTER_MODE_ONE = 1
+} pcp_filter_mode_e;
+
+/*
+ * Returns PCP_ERR_SUCCESS, or PCP_ERR_BAD_ARGS for a NULL flow or an invalid
+ * mode (the flow is then unchanged).
+ */
+int pcp_flow_set_filter_mode(pcp_flow_t *f, pcp_filter_mode_e mode);
+
+/*
+ * Add a FILTER option to a MAP flow (see pcp_flow_set_filter_mode()): traffic
+ * from filter_ip, filter_prefix bits significant, and the port of filter_ip
+ * (0: every port). A mapping without a filter lets every peer in; each filter
+ * restricts it to the peers it names, and filters add up.
+ * filter_prefix 0 removes all filters like pcp_flow_clear_filter_opts(), for
+ * any filter_ip, as RFC 6887 section 13.3 allows prefix 0 only for an IPv6
+ * address. So no filter can permit every IPv6 peer; 2000::/3 covers every
+ * global-unicast IPv6 peer without matching IPv4 ones.
  * For an IPv4 address (AF_INET, or AF_INET6 IPv4-mapped ::ffff:a.b.c.d) it is
  * 1 to 32, and is sent as 97 to 128; a value already in 96 to 128 is taken as
  * adjusted and sent unchanged, so 96 permits every IPv4 peer.
  * For any other IPv6 address it is 1 to 128.
  * An invalid prefix length, a NULL filter_ip or an address family other than
  * AF_INET/AF_INET6 is logged and the call leaves the flow unchanged.
+ * The filter is added to the flow and all its child flows (one per server), or
+ * to none of them. Returns:
+ *   PCP_ERR_SUCCESS  every flow has the filter (added, or already there), or
+ *                    the filters were removed (prefix length 0)
+ *   PCP_ERR_BAD_ARGS invalid flow, address or prefix length
+ *   PCP_ERR_MAX_SIZE a flow already has the most filters it may keep (see
+ *                    pcp_set_max_filter_opts())
+ *   PCP_ERR_NO_MEM   no memory for the filter
+ * The server keeps the filters it accepted while the mapping lives, so a
+ * request carries only the filters the server does not have yet, as many as
+ * fit in a PCP message after the other options; the rest go out in the next
+ * requests, one after the other. A renewal carries no FILTER option. All the
+ * filters are sent again when the server restarts or the mapping is lost (the
+ * renewal or the flow failed, or it expired while the client waited after an
+ * error). A request that deletes the mapping (lifetime 0) and a PEER request
+ * carry no FILTER option (RFC 6887 sections 13.3, 7.3).
+ * A server accepts a limited number of FILTER options per mapping (RFC 6887
+ * section 13.3 counts each as a permitted "remote peer"), and answers a
+ * request that would go over it with EXCESSIVE_REMOTE_PEERS; the flow then
+ * sends one filter fewer, until the server accepts. The filters over that
+ * limit are not sent; pcp_flow_get_info() reports the limit.
  */
-void pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
-                             uint8_t filter_prefix);
+int pcp_flow_set_filter_opt(pcp_flow_t *f, struct sockaddr *filter_ip,
+                            uint8_t filter_prefix);
+
+/*
+ * Remove the filter options of the flow. If the server may have some, the
+ * flow's next requests carry a FILTER option with prefix length 0, which
+ * removes the filters on the server, until the server accepts one.
+ */
+void pcp_flow_clear_filter_opts(pcp_flow_t *f);
 
 /*
  * Append prefer failure option. Valid only for a MAP flow with a suggested
@@ -287,6 +357,14 @@ typedef struct pcp_flow_info {
     uint8_t protocol;
     uint8_t learned_dscp; // relevant only for flow created by pcp_learn_dscp
     uint8_t pcp_version; // version spoken with this flow's server; 0 is NAT-PMP
+    // FILTER options (see pcp_flow_set_filter_opt()): the flow's filters,
+    // how many of them this server has accepted, and the most FILTER options
+    // it accepts on the mapping, learned from its EXCESSIVE_REMOTE_PEERS
+    // answers (0: not known). Filters over that limit are not sent until the
+    // server restarts or a filter is removed.
+    uint16_t filter_count;
+    uint16_t filter_accepted;
+    uint16_t filter_server_limit;
 } pcp_flow_info_t;
 
 // Allocates info_buf by malloc, has to be freed by client when no longer

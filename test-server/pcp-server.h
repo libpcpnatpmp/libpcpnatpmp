@@ -39,6 +39,9 @@ typedef struct server_info {
     // an IPv6 socket, [ff02::1]:5350.
     uint8_t announce_count;
     struct sockaddr_storage announce_to;
+    // a request with more FILTER options than this is answered
+    // EXCESSIVE_REMOTE_PEERS (0: no limit); each request is counted alone
+    uint8_t max_filters;
 } server_info_t;
 
 #define PCP_TEST_MAX_ANNOUNCE 10

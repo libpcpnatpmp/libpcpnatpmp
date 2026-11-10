@@ -33,6 +33,8 @@
 
 #include "pcp_client_db.h"
 #include "pcp_logger.h"
+#include "pcp_msg.h"
+#include "pcp_msg_structs.h"
 #include "pcp_socket.h"
 #include "pcp_utils.h"
 #include <assert.h>
@@ -98,6 +100,138 @@ void pcp_flow_clear_msg_buf(pcp_flow_t *f) {
     }
 }
 
+void pcp_flow_filters_resend(pcp_flow_t *f) {
+    uint16_t i;
+
+    for (i = 0; i < f->filter_count; i++) {
+        f->filters[i].state = PCP_FILTER_PENDING;
+    }
+}
+
+void pcp_flow_filters_server_restarted(pcp_flow_t *f) {
+    pcp_flow_filters_resend(f);
+    f->filter_try_total = 0;
+    f->filter_server_limit = 0;
+}
+
+uint16_t pcp_flow_filters_accepted(const pcp_flow_t *f) {
+    uint16_t i, n = 0;
+
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_CONFIRMED) {
+            n++;
+        }
+    }
+    return n;
+}
+
+int pcp_flow_filters_in_request(const pcp_flow_t *f) {
+    uint16_t i;
+
+    if (f->filter_reset_sent) {
+        return 1;
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* the request was refused or not answered: what it carried is still to send */
+static void filters_request_lost(pcp_flow_t *f) {
+    uint16_t i;
+
+    f->filter_reset_sent = 0;
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            f->filters[i].state = PCP_FILTER_PENDING;
+        }
+    }
+}
+
+int pcp_flow_filters_refused(pcp_flow_t *f) {
+    uint16_t held = f->filter_reset ? 0 : pcp_flow_filters_accepted(f);
+    uint16_t next = f->filter_last_total ? f->filter_last_total - 1 : 0;
+
+    filters_request_lost(f);
+    /* no new filter to leave out, or the mapping would end up with none: a
+     * mapping without FILTER accepts traffic from every remote host */
+    if (next < held || next == 0) {
+        return 0;
+    }
+    f->filter_try_total = next;
+    return 1;
+}
+
+/* a success response holds the options the server processed (RFC 6887
+ * section 7.3). One that answers an earlier request, still in flight when
+ * this one was sent, lacks the filters only this one carried: those are sent
+ * again */
+int pcp_flow_filters_confirmed(pcp_flow_t *f, const pcp_recv_msg_t *msg) {
+    uint16_t i;
+    int confirmed = 0;
+
+    if (f->filter_reset_sent) {
+        struct pcp_flow_filter none;
+
+        memset(&none, 0, sizeof(none));
+        f->filter_reset_sent = 0;
+        if (pcp_msg_has_filter(msg, &none)) {
+            confirmed = 1;
+            f->filter_reset = 0;
+            if (f->filter_count == 0) {
+                f->filter_sent = 0;
+            }
+        }
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state != PCP_FILTER_IN_REQUEST) {
+            continue;
+        }
+        if (pcp_msg_has_filter(msg, &f->filters[i])) {
+            f->filters[i].state = PCP_FILTER_CONFIRMED;
+            confirmed = 1;
+        } else {
+            f->filters[i].state = PCP_FILTER_PENDING;
+        }
+    }
+    /* accepted after a refusal of one more: that is the server's limit, and
+     * the filters over it are not sent */
+    if (f->filter_try_total &&
+        pcp_flow_filters_accepted(f) >= f->filter_try_total) {
+        f->filter_server_limit = f->filter_try_total;
+        for (i = 0; i < f->filter_count; i++) {
+            if (f->filters[i].state == PCP_FILTER_PENDING) {
+                f->filters[i].state = PCP_FILTER_REFUSED;
+            }
+        }
+    }
+    return confirmed;
+}
+
+int pcp_flow_filters_pending(const pcp_flow_t *f) {
+    pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
+    uint16_t i;
+
+    /* NAT-PMP has no FILTER option */
+    if (f->kd.operation != PCP_OPCODE_MAP || f->lifetime == 0 ||
+        (s != NULL && s->pcp_version == 0)) {
+        return 0;
+    }
+    if (f->filter_reset) {
+        return 1;
+    }
+    for (i = 0; i < f->filter_count; i++) {
+        if (f->filters[i].state == PCP_FILTER_PENDING ||
+            f->filters[i].state == PCP_FILTER_IN_REQUEST) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 pcp_errno pcp_delete_flow_intern(pcp_flow_t *f) {
     pcp_server_t *s;
 
@@ -108,6 +242,8 @@ pcp_errno pcp_delete_flow_intern(pcp_flow_t *f) {
     if (f->pcp_msg_buffer) {
         free(f->pcp_msg_buffer);
     }
+
+    free(f->filters);
 
 #ifdef PCP_EXPERIMENTAL
     if (f->md_vals) {

@@ -101,6 +101,8 @@ typedef struct pcp_recv_msg {
     // msg buffer
     uint32_t pcp_msg_len;
     char pcp_msg_buffer[PCP_MAX_LEN];
+    // where the options start in pcp_msg_buffer, 0 if there are none
+    uint32_t options_offset;
 } pcp_recv_msg_t;
 
 struct pcp_ctx_s {
@@ -122,6 +124,26 @@ struct pcp_ctx_s {
     struct timeval pace_window_end;
     // longest random wait before re-sending after a server restart
     uint32_t restart_delay_max_ms;
+    // the most FILTER options a flow keeps, see pcp_set_max_filter_opts()
+    uint16_t max_filter_opts;
+};
+
+/* where a FILTER option of a flow is: not yet sent to the server (or to be
+ * sent again), in the last request built, accepted by the server, or not sent
+ * because it is over the server's limit or never fits in a request */
+typedef enum {
+    PCP_FILTER_PENDING = 0,
+    PCP_FILTER_IN_REQUEST,
+    PCP_FILTER_CONFIRMED,
+    PCP_FILTER_REFUSED
+} pcp_filter_state_e;
+
+/* a FILTER option of a flow, as it goes on the wire */
+struct pcp_flow_filter {
+    struct in6_addr ip;
+    uint16_t port; /* network byte order */
+    uint8_t prefix;
+    uint8_t state; /* pcp_filter_state_e */
 };
 
 struct pcp_flow_s {
@@ -185,11 +207,32 @@ struct pcp_flow_s {
     // PREFER FAILURE Option
     uint8_t pfailure_option_present;
 
-    // FILTER Option
-    uint8_t filter_option_present;
-    uint8_t filter_prefix;
-    uint16_t filter_port;
-    struct in6_addr filter_ip;
+    // FILTER Options (RFC 6887 section 13.3). A server adds the filters of
+    // each request to the ones it has and keeps them when the mapping is
+    // renewed, so a request carries only the filters the server does not
+    // have yet (state PCP_FILTER_PENDING), as many as fit; the rest go in
+    // the next requests. Only a FILTER with prefix length 0 removes filters.
+    struct pcp_flow_filter *filters;
+    uint16_t filter_count;
+    uint16_t filter_cap; /* entries allocated in filters */
+    uint8_t filter_mode; /* pcp_filter_mode_e */
+    // filter_sent: a request with filters was built, so the server may have
+    // some. filter_reset: a filter was removed after that, so the next request
+    // starts with a prefix 0 FILTER (and then every filter of the flow) until
+    // a success reply to a request that carried it (filter_reset_sent).
+    uint8_t filter_sent;
+    uint8_t filter_reset;
+    uint8_t filter_reset_sent;
+    // A server accepts a limited number of FILTER options per mapping and
+    // answers a request that would go over it with EXCESSIVE_REMOTE_PEERS.
+    // filter_last_total: the FILTER options the mapping would have after the
+    // last request built.
+    // filter_try_total: the most the next request may bring it to (0: no
+    // limit), one less after each refusal. filter_server_limit: the most the
+    // server accepted when it had refused one more (0: not known).
+    uint16_t filter_last_total;
+    uint16_t filter_try_total;
+    uint16_t filter_server_limit;
 
     // THIRD_PARTY Option
     uint8_t third_party_option_present;
@@ -258,6 +301,33 @@ pcp_errno pcp_db_foreach_flow(pcp_ctx_t *ctx, pcp_db_flow_iterate f,
                               void *data);
 
 void pcp_flow_clear_msg_buf(pcp_flow_t *f);
+
+/* the server may not have the flow's filters any more (it restarted, or the
+ * mapping failed or expired): send all of them again, also the refused ones */
+void pcp_flow_filters_resend(pcp_flow_t *f);
+
+/* the server restarted: send every filter again and learn its limit anew */
+void pcp_flow_filters_server_restarted(pcp_flow_t *f);
+
+/* the server answered EXCESSIVE_REMOTE_PEERS: the next request brings the
+ * mapping to one filter fewer than the refused one. Returns 1 if there is
+ * such a request to send */
+int pcp_flow_filters_refused(pcp_flow_t *f);
+
+/* how many of the flow's filters the server has accepted */
+uint16_t pcp_flow_filters_accepted(const pcp_flow_t *f);
+
+/* 1 if the last request built for the flow carried a FILTER option, the one
+ * with prefix length 0 that removes the server's filters included */
+int pcp_flow_filters_in_request(const pcp_flow_t *f);
+
+/* a success reply arrived: the server has the filters of the last request.
+ * Returns 1 if that request carried any FILTER option */
+int pcp_flow_filters_confirmed(pcp_flow_t *f, const pcp_recv_msg_t *msg);
+
+/* 1 if the flow has a FILTER option (or a reset) the server has not accepted
+ * yet and that its next request would carry */
+int pcp_flow_filters_pending(const pcp_flow_t *f);
 
 #ifdef PCP_EXPERIMENTAL
 void pcp_db_add_md(pcp_flow_t *f, uint16_t md_id, void *val, size_t val_len);

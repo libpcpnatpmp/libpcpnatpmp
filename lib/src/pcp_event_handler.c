@@ -508,7 +508,9 @@ static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
         return fev_failed;
     }
 
-    if (s->restart_flow_msg == f) {
+    /* the reply that showed the restart renewed this flow already, but
+     * maybe without its FILTER options */
+    if (s->restart_flow_msg == f && !pcp_flow_filters_pending(f)) {
         return fev_ignored;
     }
 
@@ -597,7 +599,28 @@ static pcp_flow_event_e fhndl_shortlifeerror(pcp_flow_t *f,
     f->recv_result = msg->recv_result;
 
     gettimeofday(&f->timeout, NULL);
+
+    /* EXCESSIVE_REMOTE_PEERS: more FILTER options than the server accepts on
+     * a mapping. The request changed nothing, so send at once one with one
+     * filter fewer, until the server accepts (RFC 6887 section 13.3). The
+     * error's wait is for sending the same request again */
+    if (msg->recv_result == PCP_RES_EXCESSIVE_REMOTE_PEERS &&
+        pcp_flow_filters_refused(f)) {
+        PCP_LOG(PCP_LOGLVL_INFO,
+                "server refused %u FILTER options on the mapping, trying %u",
+                (unsigned)f->filter_last_total, (unsigned)f->filter_try_total);
+        /* straight on to the next request: the app is told the outcome,
+         * not each refusal */
+        return fev_send;
+    }
+
     f->timeout.tv_sec += MAX(msg->recv_lifetime, PCP_MIN_ERROR_WAIT);
+
+    /* the server's mapping ends before the next try: that request creates
+     * it again, so it carries every filter */
+    if (f->timeout.tv_sec >= f->recv_lifetime) {
+        pcp_flow_filters_resend(f);
+    }
 
     return fev_none;
 }
@@ -635,6 +658,17 @@ static pcp_flow_event_e fhndl_received_success(pcp_flow_t *f,
 #endif
     }
     f->recv_result = msg->recv_result;
+
+    /* the server has the FILTER options the response holds. Send the flow's
+     * other ones now instead of with the renewal: more than fit in one
+     * request, or ones only a newer request carried. Only when the response
+     * held some, so a request with no room for any, or a server that leaves
+     * them out of its responses, does not repeat forever */
+    if (pcp_flow_filters_confirmed(f, msg) && msg->recv_lifetime != 0 &&
+        pcp_flow_filters_pending(f)) {
+        PCP_LOG_END(PCP_LOGLVL_DEBUG);
+        return fev_send;
+    }
 
     gettimeofday(&ctv, NULL);
 
@@ -741,6 +775,17 @@ static pcp_flow_state_e handle_flow_event(pcp_flow_t *f, pcp_flow_event_e ev,
         }
 
         next_state = esm->new_state;
+
+        /* the server may have lost the mapping and its filters: it
+         * restarted, the renewal failed, or the flow failed */
+        if (ev == fev_server_restarted) {
+            pcp_flow_filters_server_restarted(f);
+        } else if (next_state == pfs_failed ||
+                   (ev == fev_failed &&
+                    (cur_state == pfs_wait_for_lifetime_renew ||
+                     cur_state == pfs_send_renew))) {
+            pcp_flow_filters_resend(f);
+        }
 
         for (trans = flow_transitions; trans < trans_end; ++trans) {
             if (((trans->state_from == cur_state) ||
@@ -1129,10 +1174,22 @@ static pcp_server_state_e handle_version_negotiation(pcp_server_t *s) {
     return pss_wait_ping_resp;
 }
 
+/* The flow whose request was the ping has its reply, and a request it sent
+ * on getting it is on its way: sending it again would only make a second
+ * reply to the same request. */
+static int send_all_iter(pcp_flow_t *f, void *data) {
+    struct flow_iterator_data *d = (struct flow_iterator_data *)data;
+
+    if (f == d->s->ping_flow_msg) {
+        return 0;
+    }
+    return flow_send_event_iter(f, data);
+}
+
 static pcp_server_state_e handle_send_all_msgs(pcp_server_t *s) {
     struct flow_iterator_data d = {s, fev_server_initialized};
 
-    pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);
+    pcp_db_foreach_flow(s->ctx, send_all_iter, &d);
     gettimeofday(&s->next_timeout, NULL);
 
     return pss_wait_io_calc_nearest_timeout;
