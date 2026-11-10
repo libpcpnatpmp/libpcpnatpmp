@@ -46,6 +46,7 @@ set (TEST_LIFETIME_RENEWAL_SOURCES
 )
 add_executable (test_lifetime_renewal ${TEST_LIFETIME_RENEWAL_SOURCES})
 add_executable (test_pcp_api test_pcp_api.c)
+add_executable (test_response_validation test_response_validation.c)
 set (TEST_PCP_CLI_NONCE_SRC
     test_pcp_cli_nonce.c
     ${TEST_PROCESS_HELPER_SOURCES}
@@ -116,6 +117,7 @@ target_link_libraries (test_event_handler pcpnatpmp)
 target_link_libraries (test_gateway pcpnatpmp)
 target_link_libraries (test_lifetime_renewal pcpnatpmp)
 target_link_libraries (test_pcp_api pcpnatpmp)
+target_link_libraries (test_response_validation pcpnatpmp)
 target_link_libraries (test_pcp_cli_client pcpnatpmp)
 target_link_libraries (test_pcp_cli_nonce pcpnatpmp)
 target_link_libraries (test_pcp_client_db pcpnatpmp)
@@ -156,6 +158,7 @@ register_pcp_test (test_pcp_client_peer_opcode)
 register_pcp_test (test_pcp_logger)
 register_pcp_test (test_pcp_msg)
 register_pcp_test (test_pcp_server)
+register_pcp_test (test_response_validation)
 register_pcp_test (test_ping_gws)
 register_pcp_test (test_server_reping)
 register_pcp_test (test_error_lifetime)

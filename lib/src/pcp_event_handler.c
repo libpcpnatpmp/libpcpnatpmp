@@ -392,6 +392,8 @@ static pcp_errno read_msg(pcp_ctx_t *ctx, pcp_recv_msg_t *msg) {
 
     memset(msg, 0, sizeof(*msg));
 
+    // the buffer has room past PCP_MAX_LEN, so validate_pcp_msg() sees a
+    // datagram that is too long instead of its first PCP_MAX_LEN octets
     if ((ret = pcp_socket_recvfrom(ctx, msg->pcp_msg_buffer,
                                    sizeof(msg->pcp_msg_buffer), MSG_DONTWAIT,
                                    (struct sockaddr *)&msg->rcvd_from_addr,
@@ -1523,6 +1525,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout) {
 
     if (read_msg(ctx, msg) == PCP_ERR_SUCCESS) {
         struct in6_addr ip6;
+        uint16_t port;
         uint32_t scope_id;
         pcp_server_t *s;
         struct hserver_iter_data param = {NULL, pcpe_io_event};
@@ -1539,10 +1542,25 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout) {
             goto process_timeouts;
         }
 
-        pcp_fill_in6_addr(&ip6, NULL, &scope_id,
+        pcp_fill_in6_addr(&ip6, &port, &scope_id,
                           (struct sockaddr *)&msg->rcvd_from_addr);
         PCP_LOG(PCP_LOGLVL_DEBUG, "SCOPE_ID: %u", scope_id);
         s = get_pcp_server_by_ip(ctx, &ip6, scope_id);
+        if (!s) {
+            char addr[INET6_ADDRSTRLEN];
+
+            PCP_LOG(PCP_LOGLVL_WARN,
+                    "Dropping a datagram from %s, which is no server's "
+                    "address.",
+                    inet_ntop(AF_INET6, &ip6, addr, sizeof(addr)));
+        } else if (port != s->pcp_port) {
+            // RFC 6887 section 8.3: the source port must be the server's too
+            PCP_LOG(PCP_LOGLVL_WARN,
+                    "Dropping a datagram from server %s's address but port "
+                    "%hu.",
+                    s->pcp_server_paddr, ntohs(port));
+            s = NULL;
+        }
 
         if (s) {
             PCP_LOG(PCP_LOGLVL_DEBUG, "Found server: %s", s->pcp_server_paddr);
