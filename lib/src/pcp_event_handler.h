@@ -33,6 +33,12 @@
 #define PCP_RESTART_MAX_DELAY_MS 5000
 #endif
 
+/* Default time to give a server that does not answer, in ms, from the
+ * first request; see pcp_set_response_timeout() */
+#ifndef PCP_RESPONSE_TIMEOUT_MS
+#define PCP_RESPONSE_TIMEOUT_MS 10000
+#endif
+
 typedef enum {
     pfs_any = -1,
     pfs_idle = 0,

@@ -340,6 +340,21 @@ PCP_SOCKET pcp_get_socket(pcp_ctx_t *ctx);
  */
 void pcp_set_restart_delay(pcp_ctx_t *ctx, uint32_t max_ms);
 
+/*
+ * A server that does not answer is given up on ms milliseconds after the
+ * first request; flows waiting on it then fail with pcp_state_failed and
+ * result code 0. The default is 10000, within which PCP sends three
+ * requests and NAT-PMP six. A NAT-PMP gateway is also given up on after
+ * nine requests, 128 s, if that comes first (RFC 6886, 3.1).
+ *
+ * 0 sets no limit: both protocols resend until the server answers.
+ *   - PCP (RFC 6887, 8.1.1) retries after about 3 s, doubling the wait up to
+ *     1024 s.
+ *   - NAT-PMP (RFC 6886, 3.1) retries after 250 ms, doubling the wait up to
+ *     64 s.
+ */
+void pcp_set_response_timeout(pcp_ctx_t *ctx, uint32_t ms);
+
 // example of pcp_pulse and pcp_get_socket use in select loop:
 /*
  pcp_ctx_t *ctx=pcp_init(1, NULL);

@@ -122,6 +122,9 @@ struct pcp_ctx_s {
     struct timeval pace_window_end;
     // longest random wait before re-sending after a server restart
     uint32_t restart_delay_max_ms;
+    // time a server gets to answer from the first request; 0 is no limit
+    // but the protocol's own
+    uint32_t response_timeout_ms;
 };
 
 struct pcp_flow_s {
@@ -161,6 +164,8 @@ struct pcp_flow_s {
     // a retransmission was put off by send pacing; keep its backoff
     uint8_t resend_deferred;
     uint32_t retry_count;
+    // when the first of the current retransmissions was sent
+    struct timeval first_sent;
     uint32_t to_send_count;
     struct timeval timeout;
 
@@ -226,7 +231,6 @@ struct pcp_server {
     uint32_t index;
     pcp_flow_t *ping_flow_msg;
     pcp_flow_t *restart_flow_msg;
-    uint32_t ping_count;
     struct timeval next_timeout;
     uint32_t natpmp_ext_addr;
     // the library's socket is not on port 5350: listening there on this one

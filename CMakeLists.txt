@@ -83,10 +83,9 @@ endif ()
 
 add_definitions (-DPCP_MAX_SUPPORTED_VERSION=2)
 add_definitions (-DPCP_SERVER_PORT=5351)
-add_definitions (-DPCP_MAX_PING_COUNT=3)
 add_definitions (-DPCP_SERVER_DISCOVERY_RETRY_DELAY=3600)
 add_definitions (-DPCP_RETX_IRT=3000)
-add_definitions (-DPCP_RETX_MRC=3)
+add_definitions (-DPCP_RETX_MRC=0)
 add_definitions (-DPCP_RETX_MRT=1024000)
 add_definitions (-DPCP_RETX_MRD=0)
 

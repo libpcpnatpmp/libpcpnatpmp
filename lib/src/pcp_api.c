@@ -101,6 +101,12 @@ void pcp_set_restart_delay(pcp_ctx_t *ctx, uint32_t max_ms) {
     }
 }
 
+void pcp_set_response_timeout(pcp_ctx_t *ctx, uint32_t ms) {
+    if (ctx) {
+        ctx->response_timeout_ms = ms;
+    }
+}
+
 pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt) {
     pcp_ctx_t *ctx = (pcp_ctx_t *)calloc(1, sizeof(pcp_ctx_t));
 
@@ -114,6 +120,7 @@ pcp_ctx_t *pcp_init(uint8_t autodiscovery, pcp_socket_vt_t *socket_vt) {
     }
 
     ctx->restart_delay_max_ms = PCP_RESTART_MAX_DELAY_MS;
+    ctx->response_timeout_ms = PCP_RESPONSE_TIMEOUT_MS;
 
     if (socket_vt) {
         ctx->virt_socket_tb = socket_vt;

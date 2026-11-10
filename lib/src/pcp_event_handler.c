@@ -71,13 +71,21 @@
 #ifndef PCP_MIN_ERROR_WAIT
 #define PCP_MIN_ERROR_WAIT 30
 #endif
-/* NAT-PMP retransmission (RFC 6886 section 3.1): wait 250 ms after the first
- * attempt, double the wait after each one, and give up after waiting out
- * the ninth, 64 s. This bounds both a flow's attempts and the pings of a
- * server that has not answered yet. PCP uses PCP_RETX_IRT, PCP_RETX_MRC and
- * PCP_MAX_PING_COUNT instead. */
+/* NAT-PMP retransmission (RFC 6886 section 3.1): wait 250 ms after the
+ * first attempt, double the wait after each one, and give up after waiting
+ * out the ninth, 128 s in all. PCP's (RFC 6887 section 8.1.1) is
+ * PCP_RETX_IRT, PCP_RETX_MRT and PCP_RETX_MRC.
+ *
+ * The context's response_timeout_ms bounds both a flow's attempts and the
+ * pings of a server that has not answered yet:
+ *   - not 0: give up at that time from the first attempt, or after
+ *     NAT-PMP's ninth attempt if sooner.
+ *   - 0: never give up, for either protocol. NAT-PMP's wait then stays at
+ *     NATPMP_RETX_MRT, the wait before RFC 6886's last attempt, as PCP's
+ *     stays at PCP_RETX_MRT. */
 #define NATPMP_RETX_IRT 250
 #define NATPMP_RETX_MRC 9
+#define NATPMP_RETX_MRT (NATPMP_RETX_IRT << (NATPMP_RETX_MRC - 1))
 #define PCP_RT(rtprev)                                                         \
     ((rtprev = rtprev << 1),                                                   \
      (((8192 + (1024 - (rand() & 2047))) *                                     \
@@ -506,6 +514,57 @@ static int pace_defer(pcp_flow_t *f, int first_transmission) {
 #endif
 }
 
+// Sets f->timeout `ms` from now, and with a time limit no later than it.
+static void set_resend_timeout(pcp_flow_t *f, uint32_t ms) {
+    gettimeofday(&f->timeout, NULL);
+    f->timeout.tv_sec += ms / 1000;
+    f->timeout.tv_usec += (ms % 1000) * 1000;
+    if (f->timeout.tv_usec >= 1000000) {
+        f->timeout.tv_sec++;
+        f->timeout.tv_usec -= 1000000;
+    }
+    if (f->ctx->response_timeout_ms > 0) {
+        struct timeval limit = f->first_sent;
+        uint32_t t = f->ctx->response_timeout_ms;
+
+        limit.tv_sec += t / 1000;
+        limit.tv_usec += (t % 1000) * 1000;
+        if (limit.tv_usec >= 1000000) {
+            limit.tv_sec++;
+            limit.tv_usec -= 1000000;
+        }
+        if (timeval_comp(&limit, &f->timeout) < 0) {
+            f->timeout = limit;
+        }
+    }
+}
+
+// Whether a server has had the protocol's attempts or its time; counts
+// this attempt. Never with no time limit.
+static int give_up_resending(pcp_flow_t *f, pcp_server_t *s) {
+    uint32_t max_attempts =
+        s->pcp_version == 0 ? NATPMP_RETX_MRC : PCP_RETX_MRC; // 0: no limit
+    // a copy: timeval_subtract() may rewrite its third argument
+    struct timeval now, elapsed, first = f->first_sent;
+    long ms;
+
+    gettimeofday(&now, NULL);
+    timeval_subtract(&elapsed, &now, &first);
+    ms = (long)elapsed.tv_sec * 1000 + (long)elapsed.tv_usec / 1000;
+    ++f->retry_count;
+    if (f->ctx->response_timeout_ms == 0 ||
+        ((max_attempts == 0 || f->retry_count < max_attempts) &&
+         ms < (long)f->ctx->response_timeout_ms)) {
+        return 0;
+    }
+    PCP_LOG(PCP_LOGLVL_WARN,
+            "%s %s did not answer %u requests in %ld ms; "
+            "giving up.",
+            s->pcp_version == 0 ? "NAT-PMP gateway" : "PCP server",
+            s->pcp_server_paddr, f->retry_count, ms);
+    return 1;
+}
+
 static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
     pcp_server_t *s = get_pcp_server(f->ctx, f->pcp_server_indx);
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
@@ -535,11 +594,11 @@ static pcp_flow_event_e fhndl_send(pcp_flow_t *f, pcp_recv_msg_t *msg) {
         return fev_failed;
     }
 
+    // a new request: its attempts and time limit count from here
     f->resend_timeout = s->pcp_version == 0 ? NATPMP_RETX_IRT : PCP_RETX_IRT;
-    // set timeout field
-    gettimeofday(&f->timeout, NULL);
-    f->timeout.tv_sec += f->resend_timeout / 1000;
-    f->timeout.tv_usec += (f->resend_timeout % 1000) * 1000;
+    f->retry_count = 0;
+    gettimeofday(&f->first_sent, NULL);
+    set_resend_timeout(f, f->resend_timeout);
 
     PCP_LOG_END(PCP_LOGLVL_DEBUG);
     return fev_msg_sent;
@@ -561,16 +620,9 @@ static pcp_flow_event_e fhndl_resend(pcp_flow_t *f,
         return fev_none;
     }
 
-    if (s->pcp_version == 0) {
-        if (++f->retry_count >= NATPMP_RETX_MRC) {
-            return fev_failed;
-        }
-    } else {
-#if PCP_RETX_MRC > 0
-        if (++f->retry_count >= PCP_RETX_MRC) {
-            return fev_failed;
-        }
-#endif
+    if (give_up_resending(f, s)) {
+        PCP_LOG_END(PCP_LOGLVL_DEBUG);
+        return fev_failed;
     }
 
     if (pcp_flow_send_msg(f, s) != PCP_ERR_SUCCESS) {
@@ -579,7 +631,7 @@ static pcp_flow_event_e fhndl_resend(pcp_flow_t *f,
     }
 
     if (s->pcp_version == 0) {
-        f->resend_timeout <<= 1;
+        f->resend_timeout = MIN(f->resend_timeout << 1, NATPMP_RETX_MRT);
     } else {
         f->resend_timeout = PCP_RT(f->resend_timeout);
     }
@@ -596,10 +648,7 @@ static pcp_flow_event_e fhndl_resend(pcp_flow_t *f,
     }
 #endif
 
-    // set timeout field
-    gettimeofday(&f->timeout, NULL);
-    f->timeout.tv_sec += f->resend_timeout / 1000;
-    f->timeout.tv_usec += (f->resend_timeout % 1000) * 1000;
+    set_resend_timeout(f, f->resend_timeout);
 
     PCP_LOG_END(PCP_LOGLVL_DEBUG);
     return fev_msg_sent;
@@ -1001,7 +1050,6 @@ static int flow_send_event_iter(pcp_flow_t *f, void *data) {
 static pcp_server_state_e handle_server_ping(pcp_server_t *s) {
     pcp_flow_t *msg = NULL;
     PCP_LOG_BEGIN(PCP_LOGLVL_DEBUG);
-    s->ping_count = 0;
 
     while ((msg = get_ping_msg(s)) != NULL) {
         msg->retry_count = 0;
@@ -1022,13 +1070,7 @@ static pcp_server_state_e handle_server_ping(pcp_server_t *s) {
 }
 
 static pcp_server_state_e handle_wait_ping_resp_timeout(pcp_server_t *s) {
-    int max_pings = s->pcp_version == 0 ? NATPMP_RETX_MRC : PCP_MAX_PING_COUNT;
-
-    if (++s->ping_count >= max_pings) {
-        gettimeofday(&s->next_timeout, NULL);
-        return pss_set_not_working;
-    }
-
+    // the ping's own retransmission gives up, in give_up_resending()
     if (!s->ping_flow_msg) {
         gettimeofday(&s->next_timeout, NULL);
         return pss_ping;
@@ -1305,8 +1347,9 @@ static pcp_server_state_e handle_server_set_not_working(pcp_server_t *s) {
 
     PCP_LOG(PCP_LOGLVL_DEBUG, "Entered function %s", __FUNCTION__);
     PCP_LOG(PCP_LOGLVL_WARN,
-            "PCP server %s failed to respond. "
-            "Disabling sending of PCP messages to this server for %d minutes.",
+            "%s %s failed to respond. "
+            "Disabling sending of messages to it for %d minutes.",
+            s->pcp_version == 0 ? "NAT-PMP gateway" : "PCP server",
             s->pcp_server_paddr, PCP_SERVER_DISCOVERY_RETRY_DELAY / 60);
 
     pcp_db_foreach_flow(s->ctx, flow_send_event_iter, &d);

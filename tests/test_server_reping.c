@@ -173,7 +173,6 @@ int main(void) {
     TEST(flow->state == pfs_failed);
 
     s->server_state = pss_wait_ping_resp;
-    s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
     test_sleep_ms(1000);
@@ -182,7 +181,6 @@ int main(void) {
 
     s->server_state = pss_version_negotiation;
     s->next_version = s->pcp_version;
-    s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
     test_sleep_ms(1000);
@@ -191,7 +189,6 @@ int main(void) {
     TEST(s->pcp_version == PCP_MAX_SUPPORTED_VERSION);
 
     s->server_state = pss_version_negotiation;
-    s->ping_count = 0;
     s->ping_flow_msg = NULL;
     s->pcp_version = 0;
     pcp_flow_updated(flow);
@@ -201,16 +198,34 @@ int main(void) {
 
     s->pcp_version = PCP_MAX_SUPPORTED_VERSION;
     s->server_state = pss_wait_ping_resp;
-    s->ping_count = 0;
     s->ping_flow_msg = NULL;
     pcp_flow_updated(flow);
     test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_ping);
 
+    // without a time limit a PCP ping is resent, the server not given up on
+    pcp_set_response_timeout(ctx, 0);
     s->server_state = pss_wait_ping_resp;
-    s->ping_count = PCP_MAX_PING_COUNT - 1;
+    s->ping_flow_msg = flow;
     pcp_flow_updated(flow);
+    // after pcp_flow_updated(), which would make it send anew
+    flow->state = pfs_wait_resp;
+    flow->first_sent.tv_sec = 0;
+    flow->first_sent.tv_usec = 0;
+    test_sleep_ms(1000);
+    pcp_pulse(ctx, NULL);
+    TEST(s->server_state == pss_wait_ping_resp);
+
+    // a ping unanswered past the time limit gives up on the server
+    pcp_set_response_timeout(ctx, 1);
+    s->server_state = pss_wait_ping_resp;
+    s->ping_flow_msg = flow;
+    pcp_flow_updated(flow);
+    // after pcp_flow_updated(), which would make it send anew
+    flow->state = pfs_wait_resp;
+    flow->first_sent.tv_sec = 0;
+    flow->first_sent.tv_usec = 0;
     test_sleep_ms(1000);
     pcp_pulse(ctx, NULL);
     TEST(s->server_state == pss_not_working);

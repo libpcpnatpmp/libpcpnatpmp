@@ -348,6 +348,13 @@ int main(void) {
     TEST(ctx->restart_delay_max_ms == 5000);
     pcp_set_restart_delay(ctx, 0);
     TEST(ctx->restart_delay_max_ms == 0);
+    // a silent server is given 10 s by default; any value is kept, 0 too
+    TEST(ctx->response_timeout_ms == 10000);
+    pcp_set_response_timeout(ctx, 2500);
+    TEST(ctx->response_timeout_ms == 2500);
+    pcp_set_response_timeout(ctx, 0);
+    TEST(ctx->response_timeout_ms == 0);
+    pcp_set_response_timeout(NULL, 1000);
     pcp_terminate(ctx, 1);
 
     printf("Tests succeeded.\n\n");

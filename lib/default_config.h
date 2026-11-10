@@ -35,11 +35,6 @@
 /* enable FLOW-PRIORITY option support */
 /* #undef PCP_FLOW_PRIORITY */
 
-/* Maximum number of ping attempts */
-#ifndef PCP_MAX_PING_COUNT
-#define PCP_MAX_PING_COUNT 5
-#endif
-
 /* Initial retransmission time */
 #ifndef PCP_RETX_IRT
 #define PCP_RETX_IRT 3000
@@ -47,7 +42,7 @@
 
 /* Maximum retransmission count (0 indicates no maximum) */
 #ifndef PCP_RETX_MRC
-#define PCP_RETX_MRC 3
+#define PCP_RETX_MRC 0
 #endif
 
 /* Maximum retransmission duration (0 indicates no maximum) */
