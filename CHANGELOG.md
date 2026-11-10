@@ -12,6 +12,7 @@ The format is inspired by Keep a Changelog and this project follows Semantic Ver
   server, so a client can tell a PCP mapping from a NAT-PMP one (version 0).
 - `pcp_set_restart_delay()`: the longest random wait before re-sending after a server restart (default 5000 ms, 0 turns it off).
 - `pcp_set_response_timeout()`: how long a server that does not answer is given from the first request before its flows fail (default 10000 ms; 0 resends until the server answers, for NAT-PMP and PCP alike).
+- `pcpnatpmpc` says why a flow failed: the result code the server refused it with, or that there was none because the server did not answer or the request could not be sent.
 
 ### Fixed
 
