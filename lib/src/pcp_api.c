@@ -795,6 +795,7 @@ pcp_flow_info_t *pcp_flow_get_info(pcp_flow_t *f, size_t *info_count) {
 
         if (s) {
             info_iter->pcp_version = s->pcp_version;
+            info_iter->server_last_response = s->last_response;
         }
 
         switch (fiter->state) {

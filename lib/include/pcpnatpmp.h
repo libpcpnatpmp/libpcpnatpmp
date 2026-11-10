@@ -282,6 +282,9 @@ typedef struct pcp_flow_info {
     uint8_t protocol;
     uint8_t learned_dscp; // relevant only for flow created by pcp_learn_dscp
     uint8_t pcp_version; // version spoken with this flow's server; 0 is NAT-PMP
+    // when this flow's server last answered anything, by the client's clock
+    // in seconds as time() gives; 0 if it has not
+    time_t server_last_response;
 } pcp_flow_info_t;
 
 // Allocates info_buf by malloc, has to be freed by client when no longer

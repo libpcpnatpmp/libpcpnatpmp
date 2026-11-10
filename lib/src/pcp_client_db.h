@@ -237,6 +237,8 @@ struct pcp_server {
     // re-sending after a restart is waiting for restart_resend_at
     uint8_t restart_pending;
     struct timeval restart_resend_at;
+    // when the server last answered anything (0: never)
+    time_t last_response;
     void *app_data;
 };
 

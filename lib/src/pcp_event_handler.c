@@ -1544,6 +1544,7 @@ int pcp_pulse(pcp_ctx_t *ctx, struct timeval *next_timeout) {
 
         if (s) {
             PCP_LOG(PCP_LOGLVL_DEBUG, "Found server: %s", s->pcp_server_paddr);
+            s->last_response = msg->received_time;
             msg->pcp_server_indx = s->index;
             memcpy(&msg->kd.pcp_server_ip, s->pcp_ip, sizeof(struct in6_addr));
             pcp_fill_in6_addr(&msg->kd.src_ip, NULL, &msg->kd.scope_id,
