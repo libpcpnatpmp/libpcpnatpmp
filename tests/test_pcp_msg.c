@@ -232,7 +232,8 @@ int main(void) {
 #endif
         TEST(build_pcp_msg(NULL) == NULL);
     }
-    { // TEST a delete request suggests no external address or port
+    { // TEST a MAP or PEER delete request suggests no external address or
+      // port
         /* ::ffff:0.0.0.0 */
         static const uint8_t v4_any[16] = {0, 0, 0, 0, 0,    0,
                                            0, 0, 0, 0, 0xff, 0xff};
@@ -240,19 +241,23 @@ int main(void) {
         struct pcp_flow_s fs;
         pcp_server_t *s;
         uint8_t version;
+        int kind;
 
         memset(&fs, 0, sizeof(fs));
         fs.ctx = ctx;
         fs.pcp_server_indx = pcp_add_server(ctx, Sock_pton("127.0.0.2"), 2);
         s = get_pcp_server(ctx, fs.pcp_server_indx);
         TEST(s != NULL);
-        fs.kd.operation = PCP_OPCODE_MAP;
         fs.kd.map_peer.protocol = IPPROTO_UDP;
         fs.kd.map_peer.src_port = htons(3456);
+        fs.kd.map_peer.dst_port = htons(4567);
 
-        for (version = 1; version <= 2; version++) {
-            int v6;
+        /* MAP and PEER, each in versions 1 and 2 */
+        for (kind = 0; kind < 4; kind++) {
+            int peer = kind >= 2, v6;
 
+            version = (uint8_t)(1 + kind % 2);
+            fs.kd.operation = peer ? PCP_OPCODE_PEER : PCP_OPCODE_MAP;
             s->pcp_version = version;
             for (v6 = 0; v6 <= 1; v6++) {
                 const uint8_t *any = v6 ? v6_any : v4_any;
@@ -269,7 +274,15 @@ int main(void) {
                 fs.lifetime = 0;
                 req = (pcp_request_t *)build_pcp_msg(&fs);
                 TEST(req != NULL);
-                if (version == 1) {
+                if (peer && version == 1) {
+                    pcp_peer_v1_t *m = (pcp_peer_v1_t *)req->next_data;
+                    ext_ip = m->ext_ip;
+                    ext_port = &m->ext_port;
+                } else if (peer) {
+                    pcp_peer_v2_t *m = (pcp_peer_v2_t *)req->next_data;
+                    ext_ip = m->ext_ip;
+                    ext_port = &m->ext_port;
+                } else if (version == 1) {
                     pcp_map_v1_t *m = (pcp_map_v1_t *)req->next_data;
                     ext_ip = m->ext_ip;
                     ext_port = &m->ext_port;
@@ -297,6 +310,7 @@ int main(void) {
         {
             nat_pmp_map_req_t *m;
 
+            fs.kd.operation = PCP_OPCODE_MAP;
             s->pcp_version = 0;
             fs.lifetime = 0;
             m = (nat_pmp_map_req_t *)build_pcp_msg(&fs);
