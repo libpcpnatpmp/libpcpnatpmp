@@ -102,7 +102,8 @@ int main(void) {
         TEST(msg.recv_version == 0);
         TEST(msg.recv_epoch == 1234);
         TEST(msg.recv_lifetime == 2233);
-        TEST(msg.recv_result == 11);
+        // NAT-PMP defines no code 11: the undefined, fatal PCP code 255
+        TEST(msg.recv_result == 255);
 
         memset(&msg, 0, sizeof(msg));
         memcpy(&msg.pcp_msg_buffer, &natpmp_mu, sizeof(natpmp_mu));
@@ -114,7 +115,8 @@ int main(void) {
         TEST(msg.recv_version == 0);
         TEST(msg.recv_epoch == 1234);
         TEST(msg.recv_lifetime == 2233);
-        TEST(msg.recv_result == 11);
+        // NAT-PMP defines no code 11: the undefined, fatal PCP code 255
+        TEST(msg.recv_result == 255);
 
         msg.pcp_msg_len = sizeof(natpmp_mu) - 1;
         TEST(parse_response(&msg) != PCP_ERR_SUCCESS);
@@ -125,6 +127,45 @@ int main(void) {
 
         msg.pcp_msg_len = sizeof(natpmp_mu);
         TEST(parse_response(&msg) != PCP_ERR_SUCCESS);
+    }
+    { // NAT-PMP result codes (RFC 6886 section 3.5) as the PCP codes
+      // (RFC 6887 section 7.4) with the same meaning, in a MAP response and
+      // in an Unsupported Version response
+        static const struct {
+            uint16_t natpmp;
+            uint32_t pcp;
+        } codes[] = {{0, PCP_RES_SUCCESS},
+                     {1, PCP_RES_UNSUPP_VERSION},
+                     {2, PCP_RES_NOT_AUTHORIZED},
+                     {3, PCP_RES_NETWORK_FAILURE},
+                     {4, PCP_RES_NO_RESOURCES},
+                     {5, PCP_RES_UNSUPP_OPCODE},
+                     {6, 255},
+                     {9, 255}};
+        nat_pmp_map_resp_t map;
+        nat_pmp_inv_version_resp_t inv;
+        pcp_recv_msg_t msg;
+        size_t i;
+
+        for (i = 0; i < sizeof(codes) / sizeof(codes[0]); i++) {
+            memset(&map, 0, sizeof(map));
+            map.opcode = 0x80 | NATPMP_OPCODE_MAP_TCP;
+            map.result = htons(codes[i].natpmp);
+            memset(&msg, 0, sizeof(msg));
+            memcpy(&msg.pcp_msg_buffer, &map, sizeof(map));
+            msg.pcp_msg_len = sizeof(map);
+            TEST(parse_response(&msg) == PCP_ERR_SUCCESS);
+            TEST(msg.recv_result == codes[i].pcp);
+
+            memset(&inv, 0, sizeof(inv));
+            inv.opcode = 0x80 | NATPMP_OPCODE_MAP_TCP;
+            inv.result = htons(codes[i].natpmp);
+            memset(&msg, 0, sizeof(msg));
+            memcpy(&msg.pcp_msg_buffer, &inv, sizeof(inv));
+            msg.pcp_msg_len = sizeof(inv);
+            TEST(parse_response(&msg) == PCP_ERR_SUCCESS);
+            TEST(msg.recv_result == codes[i].pcp);
+        }
     }
 #endif
     { // TEST validate MSG

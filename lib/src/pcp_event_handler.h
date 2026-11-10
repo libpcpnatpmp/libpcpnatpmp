@@ -76,6 +76,8 @@ typedef enum {
     fev_res_cant_provide_ext = FEV_RES_BEGIN + PCP_RES_CANNOT_PROVIDE_EXTERNAL,
     fev_res_address_mismatch = FEV_RES_BEGIN + PCP_RES_ADDRESS_MISMATCH,
     fev_res_exc_remote_peers = FEV_RES_BEGIN + PCP_RES_EXCESSIVE_REMOTE_PEERS,
+    // any result code above PCP_RES_EXCESSIVE_REMOTE_PEERS
+    fev_res_unknown,
 } pcp_flow_event_e;
 
 typedef enum {
