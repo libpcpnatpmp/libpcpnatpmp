@@ -87,7 +87,10 @@ TESTS = tests/test_flow_notify \
         tests/test_pcp_msg \
         tests/test_server_reping \
         tests/test_error_lifetime \
+        tests/test_no_resources_hold \
         tests/test_short_error_wait \
+        tests/test_result_codes \
+        tests/test_natpmp_result_codes \
         tests/test_multicast_announce \
         $(PCP_SADSCP_TESTS) \
         $(PCP_EXPERIMENTAL_TESTS)
